@@ -96,6 +96,46 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_create_campaign",
+      description:
+        "Create a campaign on an ad account (Marketing API POST). Default: PAUSED (no delivery), OUTCOME_TRAFFIC, empty special_ad_categories, ad-set-level budgets. Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          name: {
+            type: "string",
+            description: "Campaign name (default: MCP Test Campaign + UTC timestamp)",
+          },
+          objective: {
+            type: "string",
+            description:
+              "Outcome objective, e.g. OUTCOME_TRAFFIC, OUTCOME_LEADS, OUTCOME_AWARENESS (default OUTCOME_TRAFFIC)",
+          },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+            description: "Initial status (default PAUSED — safe for testing)",
+          },
+          special_ad_categories: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "e.g. HOUSING, EMPLOYMENT, CREDIT — use empty [] for none (default [])",
+          },
+          is_adset_budget_sharing_enabled: {
+            type: "boolean",
+            description:
+              "Campaign budget optimization off by default (false = separate ad set budgets)",
+          },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
       name: "meta_list_adsets",
       description: "List ad sets for an ad account (optional campaign filter).",
       inputSchema: {
@@ -412,6 +452,31 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               "id,name,status,effective_status,objective,daily_budget,lifetime_budget",
             limit: (args.limit as number) ?? 50,
             ...(filtering ? { filtering } : {}),
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_create_campaign": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const defaultName = `MCP Test Campaign ${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}`;
+        const name = String(args.name ?? defaultName).trim() || defaultName;
+        const objective = String(args.objective ?? "OUTCOME_TRAFFIC").trim();
+        const status = String(args.status ?? "PAUSED").trim().toUpperCase();
+        const categories = Array.isArray(args.special_ad_categories)
+          ? args.special_ad_categories.map(String)
+          : [];
+        const sharing =
+          args.is_adset_budget_sharing_enabled === true ? 1 : 0;
+        const data = await graphRequest({
+          path: `${act}/campaigns`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            objective,
+            status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            special_ad_categories: categories,
+            is_adset_budget_sharing_enabled: sharing,
           },
         });
         return jsonResult(data);
