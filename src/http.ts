@@ -4,7 +4,9 @@
  * GET /health — health check (no auth).
  *
  * Env: PORT (Railway), META_ACCESS_TOKEN, optional MCP_AUTH_TOKEN, MCP_ALLOWED_HOSTS.
+ * Local: put secrets in `.env` at project root (see `.env.example`).
  */
+import "dotenv/config";
 import type { Request, Response, NextFunction } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
