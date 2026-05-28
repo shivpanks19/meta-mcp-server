@@ -11,11 +11,32 @@ import type { Request, Response, NextFunction } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { createMetaServer } from "./meta-server.js";
+import {
+  normalizeAccountInputs,
+  runMetaWeeklyReport,
+} from "./weekly-report.js";
 
 function parseAllowedHosts(): string[] | undefined {
   const raw = process.env.MCP_ALLOWED_HOSTS?.trim();
   if (!raw) return undefined;
   return raw.split(",").map((h) => h.trim()).filter(Boolean);
+}
+
+function cronAuthMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) {
+    next();
+    return;
+  }
+  const auth = req.headers.authorization;
+  if (auth !== `Bearer ${secret}`) {
+    res.status(401).json({
+      error: "Unauthorized",
+      hint: "Set Authorization: Bearer <CRON_SECRET>",
+    });
+    return;
+  }
+  next();
 }
 
 function authMiddleware(req: Request, res: Response, next: NextFunction): void {
@@ -108,11 +129,42 @@ app.get("/health", (_req: Request, res: Response) => {
     ok: true,
     service: "meta-mcp-server",
     mcpPath,
+    weeklyJobPath: "/v1/meta-weekly/run",
     authRequired: Boolean(process.env.MCP_AUTH_TOKEN?.trim()),
+    cronAuthRequired: Boolean(process.env.CRON_SECRET?.trim()),
   });
 });
 
 installMcpRoute(app, mcpPath, authMiddleware);
+
+app.post(
+  "/v1/meta-weekly/run",
+  cronAuthMiddleware,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const result = await runMetaWeeklyReport({
+        since: body.since as string | undefined,
+        until: body.until as string | undefined,
+        accounts: normalizeAccountInputs(body.accounts),
+        spreadsheetId: body.spreadsheet_id as string | undefined,
+        minSpendInr:
+          typeof body.min_spend_inr === "number" ? body.min_spend_inr : undefined,
+        writeClientReports:
+          body.write_repo === true || body.write_client_reports === true,
+        clearTab: body.clear_tab !== false,
+        skipSheets: body.skip_sheets === true,
+      });
+      res.json(result);
+    } catch (e) {
+      console.error("meta-weekly job error:", e);
+      res.status(500).json({
+        status: "error",
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+);
 
 app.listen(port, host, () => {
   console.error(
