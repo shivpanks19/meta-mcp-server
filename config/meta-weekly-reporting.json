@@ -1,0 +1,22 @@
+{
+  "spreadsheet_id": "1By0dNz6eQMczGRmLMn1G_49rFovOEHQbcDVJt94aAXE",
+  "min_spend_inr": 1,
+  "default_date_preset": "last_7d",
+  "accounts": [
+    {
+      "client_slug": "roombr",
+      "ad_account_id": "3416732325166781",
+      "name": "Roombr 2026"
+    },
+    {
+      "client_slug": "hexanovate",
+      "ad_account_id": "590939353820229",
+      "name": "Ed Tech B2B"
+    },
+    {
+      "client_slug": "ekin",
+      "ad_account_id": "926655825827186",
+      "name": "EyeRIS Interactive"
+    }
+  ]
+}

@@ -10,6 +10,18 @@ import {
   optionalPageToken,
   requireEnvToken,
 } from "./meta-api.js";
+import {
+  normalizeAccountInputs,
+  runMetaWeeklyReport,
+} from "./weekly-report.js";
+import { loadWeeklyConfig } from "./weekly/config.js";
+import { resolveSpreadsheetId } from "./weekly/google-auth.js";
+import {
+  clearSheetTab,
+  listSheetTabs,
+  readSheetRange,
+  testGoogleSheetsAccess,
+} from "./weekly/sheets.js";
 
 function jsonResult(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
@@ -369,6 +381,114 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_test_google_sheets",
+      description:
+        "Verify Google Sheets credentials (GOOGLE_ADS_CREDENTIALS_* / OAuth env) and list tabs on a spreadsheet.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          spreadsheet_id: {
+            type: "string",
+            description:
+              "Spreadsheet ID (default: GOOGLE_SHEETS_SPREADSHEET_ID or config spreadsheet_id)",
+          },
+        },
+      },
+    },
+    {
+      name: "meta_list_sheet_tabs",
+      description: "List worksheet tab names in a Google Spreadsheet.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          spreadsheet_id: { type: "string" },
+        },
+      },
+    },
+    {
+      name: "meta_read_sheet_range",
+      description: "Read cell values from a spreadsheet tab (A1 range).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          spreadsheet_id: { type: "string" },
+          sheet_title: { type: "string", description: "Tab name (case-sensitive)" },
+          a1_range: {
+            type: "string",
+            description: "e.g. A1:Z100 (default A:ZZ)",
+          },
+        },
+        required: ["sheet_title"],
+      },
+    },
+    {
+      name: "meta_clear_sheet_tab",
+      description: "Clear all values in a spreadsheet tab (row data only).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          spreadsheet_id: { type: "string" },
+          sheet_title: { type: "string" },
+        },
+        required: ["sheet_title"],
+      },
+    },
+    {
+      name: "meta_run_weekly_report",
+      description:
+        "Run Meta weekly reporting: fetch insights, transform, write Google Sheet tab. Pass accounts in the call (recommended from Cursor) or use config/meta-weekly-reporting.json. Returns summary JSON only.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          since: { type: "string", description: "YYYY-MM-DD (default: 7 days ago)" },
+          until: { type: "string", description: "YYYY-MM-DD (default: today)" },
+          accounts: {
+            type: "array",
+            description:
+              "Ad accounts for this run. If omitted, uses config file accounts.",
+            items: {
+              type: "object",
+              properties: {
+                ad_account_id: {
+                  type: "string",
+                  description: "Numeric id or act_XXXX",
+                },
+                name: {
+                  type: "string",
+                  description: "Display name in report (default: client_slug or id)",
+                },
+                client_slug: {
+                  type: "string",
+                  description: "Folder slug for write_client_reports (default: account-{id})",
+                },
+              },
+              required: ["ad_account_id"],
+            },
+          },
+          spreadsheet_id: {
+            type: "string",
+            description: "Override config spreadsheet_id",
+          },
+          min_spend_inr: {
+            type: "number",
+            description: "Min spend filter (default from config, usually 1)",
+          },
+          write_client_reports: {
+            type: "boolean",
+            description: "Write clients/{slug}/reports/meta-weekly-*.md (default false)",
+          },
+          clear_tab: {
+            type: "boolean",
+            description: "Clear sheet tab before write (default true)",
+          },
+          skip_sheets: {
+            type: "boolean",
+            description: "Fetch/transform only; skip Google Sheets (debug)",
+          },
+        },
+      },
+    },
+    {
       name: "meta_graph_get",
       description:
         "Low-level read-only GET to the Graph API. Path without leading slash, e.g. me or act_123/campaigns. Use sparingly; prefer named tools.",
@@ -691,6 +811,86 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           params: query,
         });
         return jsonResult(data);
+      }
+      case "meta_test_google_sheets": {
+        let spreadsheetId = args.spreadsheet_id as string | undefined;
+        if (!spreadsheetId?.trim()) {
+          try {
+            spreadsheetId = loadWeeklyConfig().spreadsheet_id;
+          } catch {
+            /* use env via resolveSpreadsheetId */
+          }
+        }
+        const data = await testGoogleSheetsAccess(spreadsheetId);
+        return jsonResult(data);
+      }
+      case "meta_list_sheet_tabs": {
+        let spreadsheetId = args.spreadsheet_id as string | undefined;
+        if (!spreadsheetId?.trim()) {
+          try {
+            spreadsheetId = loadWeeklyConfig().spreadsheet_id;
+          } catch {
+            /* env fallback */
+          }
+        }
+        const tabs = await listSheetTabs(spreadsheetId);
+        return jsonResult({
+          spreadsheet_id: resolveSpreadsheetId(spreadsheetId),
+          tabs,
+        });
+      }
+      case "meta_read_sheet_range": {
+        let spreadsheetId = args.spreadsheet_id as string | undefined;
+        if (!spreadsheetId?.trim()) {
+          try {
+            spreadsheetId = loadWeeklyConfig().spreadsheet_id;
+          } catch {
+            /* env fallback */
+          }
+        }
+        const values = await readSheetRange(
+          spreadsheetId,
+          String(args.sheet_title),
+          (args.a1_range as string) || "A:ZZ"
+        );
+        return jsonResult({
+          spreadsheet_id: resolveSpreadsheetId(spreadsheetId),
+          sheet_title: args.sheet_title,
+          row_count: values.length,
+          values,
+        });
+      }
+      case "meta_clear_sheet_tab": {
+        let spreadsheetId = args.spreadsheet_id as string | undefined;
+        if (!spreadsheetId?.trim()) {
+          try {
+            spreadsheetId = loadWeeklyConfig().spreadsheet_id;
+          } catch {
+            /* env fallback */
+          }
+        }
+        await clearSheetTab(spreadsheetId, String(args.sheet_title));
+        return jsonResult({
+          ok: true,
+          spreadsheet_id: resolveSpreadsheetId(spreadsheetId),
+          sheet_title: args.sheet_title,
+        });
+      }
+      case "meta_run_weekly_report": {
+        const result = await runMetaWeeklyReport({
+          since: args.since as string | undefined,
+          until: args.until as string | undefined,
+          accounts: normalizeAccountInputs(args.accounts),
+          spreadsheetId: args.spreadsheet_id as string | undefined,
+          minSpendInr:
+            typeof args.min_spend_inr === "number"
+              ? args.min_spend_inr
+              : undefined,
+          writeClientReports: args.write_client_reports === true,
+          clearTab: args.clear_tab !== false,
+          skipSheets: args.skip_sheets === true,
+        });
+        return jsonResult(result);
       }
       default:
         return {
