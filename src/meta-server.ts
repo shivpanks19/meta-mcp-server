@@ -5,11 +5,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import {
+  graphMultipartRequest,
   graphRequest,
   MetaGraphError,
   optionalPageToken,
   requireEnvToken,
 } from "./meta-api.js";
+import fs from "fs";
+import path from "node:path";
 import {
   normalizeAccountInputs,
   runMetaWeeklyReport,
@@ -145,6 +148,251 @@ export function createMetaServer(): Server {
           },
         },
         required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "meta_create_adset",
+      description:
+        "Create an ad set on an ad account (Marketing API POST). Default: PAUSED. Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          campaign_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+            description: "Initial status (default PAUSED — safe for testing)",
+          },
+          daily_budget: { type: "number" },
+          billing_event: { type: "string" },
+          optimization_goal: { type: "string" },
+          bid_strategy: { type: "string" },
+          targeting: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["ad_account_id", "campaign_id", "name"],
+      },
+    },
+    {
+      name: "meta_create_creative",
+      description:
+        "Create an ad creative on an ad account (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          name: { type: "string" },
+          object_story_spec: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["ad_account_id", "name", "object_story_spec"],
+      },
+    },
+    {
+      name: "meta_upload_image",
+      description:
+        "Download an image from a public URL and upload it to a Meta ad account (bytes/base64). Returns image hash for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          image_url: {
+            type: "string",
+            description: "Public image URL accessible by Meta",
+          },
+        },
+        required: ["ad_account_id", "image_url"],
+      },
+    },
+    {
+      name: "meta_upload_image_file",
+      description:
+        "Upload a local image file to a Meta ad account (bytes/base64). Returns image hash for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to image file on local machine",
+          },
+        },
+        required: ["ad_account_id", "file_path"],
+      },
+    },
+    {
+      name: "meta_upload_video_file",
+      description:
+        "Upload a local video file to a Meta ad account via multipart streaming (source field). Returns video id for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to video file on local machine",
+          },
+        },
+        required: ["ad_account_id", "file_path"],
+      },
+    },
+    {
+      name: "meta_get_video_status",
+      description:
+        "Get processing status and details for a Meta uploaded video by video id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          video_id: {
+            type: "string",
+            description: "Meta video id returned from meta_upload_video_file",
+          },
+        },
+        required: ["video_id"],
+      },
+    },
+    {
+      name: "meta_create_ad",
+      description:
+        "Create an ad on an ad account (Marketing API POST). Default: PAUSED. Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          adset_id: { type: "string" },
+          name: { type: "string" },
+          creative_id: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+            description: "Initial status (default PAUSED — safe for testing)",
+          },
+        },
+        required: ["ad_account_id", "adset_id", "name", "creative_id"],
+      },
+    },
+    {
+      name: "meta_update_campaign",
+      description:
+        "Update a campaign by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          daily_budget: { type: "number" },
+          lifetime_budget: { type: "number" },
+          bid_strategy: { type: "string" },
+          special_ad_categories: {
+            type: "array",
+            items: { type: "string" },
+          },
+          is_adset_budget_sharing_enabled: { type: "boolean" },
+        },
+        required: ["campaign_id"],
+      },
+    },
+    {
+      name: "meta_update_adset",
+      description: "Update an ad set by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          daily_budget: { type: "number" },
+          billing_event: { type: "string" },
+          optimization_goal: { type: "string" },
+          bid_strategy: { type: "string" },
+          targeting: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["adset_id"],
+      },
+    },
+    {
+      name: "meta_update_ad",
+      description: "Update an ad by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          creative_id: { type: "string" },
+        },
+        required: ["ad_id"],
+      },
+    },
+    {
+      name: "meta_pause_campaign",
+      description:
+        "Pause a campaign by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+        },
+        required: ["campaign_id"],
+      },
+    },
+    {
+      name: "meta_pause_adset",
+      description: "Pause an ad set by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+        },
+        required: ["adset_id"],
+      },
+    },
+    {
+      name: "meta_pause_ad",
+      description: "Pause an ad by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+        },
+        required: ["ad_id"],
       },
     },
     {
@@ -597,6 +845,266 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
             special_ad_categories: categories,
             is_adset_budget_sharing_enabled: sharing,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_create_adset": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const campaignId = String(args.campaign_id).trim();
+        const status = String(args.status ?? "PAUSED").trim().toUpperCase();
+        const data = await graphRequest({
+          path: `${act}/adsets`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            campaign_id: campaignId,
+            status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            daily_budget: args.daily_budget,
+            billing_event: args.billing_event,
+            optimization_goal: args.optimization_goal,
+            bid_strategy: args.bid_strategy,
+            targeting: args.targeting,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_create_creative": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const data = await graphRequest({
+          path: `${act}/adcreatives`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            object_story_spec: args.object_story_spec,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_upload_image": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const imageUrl = String(args.image_url).trim();
+
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) {
+          throw new Error(
+            `Failed to download image: ${imgRes.status} ${imgRes.statusText}`
+          );
+        }
+        const bytes = Buffer.from(await imgRes.arrayBuffer()).toString("base64");
+
+        const data = await graphRequest({
+          path: `${act}/adimages`,
+          method: "POST",
+          accessToken: token,
+          body: { bytes },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_upload_image_file": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const filePath = String(args.file_path).trim();
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const bytes = fs.readFileSync(filePath).toString("base64");
+
+        const data = await graphRequest({
+          path: `${act}/adimages`,
+          method: "POST",
+          accessToken: token,
+          body: { bytes },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_upload_video_file": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const filePath = String(args.file_path).trim();
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const fileBuffer = fs.readFileSync(filePath);
+        const fileName = path.basename(filePath);
+
+        const data = await graphMultipartRequest<{ id: string }>({
+          path: `${act}/advideos`,
+          accessToken: token,
+          buildForm: (form) => {
+            form.append("source", new Blob([fileBuffer]), fileName);
+          },
+        });
+
+        return jsonResult({
+          success: true,
+          video_id: data.id,
+          raw: data,
+        });
+      }
+      case "meta_get_video_status": {
+        const videoId = String(args.video_id).trim();
+
+        const data = await graphRequest({
+          path: videoId,
+          accessToken: token,
+          params: {
+            fields:
+              "id,title,status,processing_progress,length,source,updated_time",
+          },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_create_ad": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const status = String(args.status ?? "PAUSED").trim().toUpperCase();
+        const data = await graphRequest({
+          path: `${act}/ads`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            adset_id: String(args.adset_id).trim(),
+            status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            creative: {
+              creative_id: String(args.creative_id).trim(),
+            },
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_campaign": {
+        const campaignId = String(args.campaign_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const categories = Array.isArray(args.special_ad_categories)
+          ? args.special_ad_categories.map(String)
+          : undefined;
+        const sharing =
+          typeof args.is_adset_budget_sharing_enabled === "boolean"
+            ? args.is_adset_budget_sharing_enabled === true
+              ? 1
+              : 0
+            : undefined;
+        const data = await graphRequest({
+          path: campaignId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            daily_budget: args.daily_budget,
+            lifetime_budget: args.lifetime_budget,
+            bid_strategy: args.bid_strategy,
+            special_ad_categories: categories,
+            is_adset_budget_sharing_enabled: sharing,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_adset": {
+        const adsetId = String(args.adset_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const data = await graphRequest({
+          path: adsetId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            daily_budget: args.daily_budget,
+            billing_event: args.billing_event,
+            optimization_goal: args.optimization_goal,
+            bid_strategy: args.bid_strategy,
+            targeting: args.targeting,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_ad": {
+        const adId = String(args.ad_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const creativeId =
+          typeof args.creative_id === "string"
+            ? args.creative_id.trim()
+            : undefined;
+        const data = await graphRequest({
+          path: adId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            creative: creativeId ? { creative_id: creativeId } : undefined,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_campaign": {
+        const campaignId = String(args.campaign_id).trim();
+        const data = await graphRequest({
+          path: campaignId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_adset": {
+        const adsetId = String(args.adset_id).trim();
+        const data = await graphRequest({
+          path: adsetId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_ad": {
+        const adId = String(args.ad_id).trim();
+        const data = await graphRequest({
+          path: adId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
           },
         });
         return jsonResult(data);
