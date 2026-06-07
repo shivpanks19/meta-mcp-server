@@ -58,6 +58,73 @@ export function createMetaServer(): Server {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
+      name: "meta_snapshot_object",
+      description: "Capture and return a full snapshot of a campaign, adset, ad or creative for version tracking.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          object_id: { type: "string" },
+          object_type: {
+            type: "string",
+            enum: ["campaign", "adset", "ad", "creative"]
+          }
+        },
+        required: ["object_id", "object_type"]
+      }
+    },
+    {
+      name: "meta_compare_snapshots",
+      description: "Compare two snapshots and return field-level differences.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          before_snapshot: {
+            type: "object",
+            additionalProperties: true
+          },
+          after_snapshot: {
+            type: "object",
+            additionalProperties: true
+          }
+        },
+        required: ["before_snapshot", "after_snapshot"]
+      }
+    },
+    {
+      name: "meta_get_account_activity",
+      description: "Fetch Meta ad account activity history (campaign, adset, ad changes) for a date range using the activities endpoint.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id with or without act_ prefix"
+          },
+          since: {
+            type: "string",
+            description: "YYYY-MM-DD"
+          },
+          until: {
+            type: "string",
+            description: "YYYY-MM-DD"
+          },
+          limit: {
+            type: "number",
+            description: "Default 500"
+          },
+          category: {
+            type: "string",
+            description: "Optional activity category such as ACCOUNT, CAMPAIGN, ADSET, AD, ADS_MANAGEMENT"
+          },
+          add_children: {
+            type: "boolean",
+            description: "Include child object changes where supported"
+          }
+        },
+        required: ["ad_account_id", "since", "until"]
+      }
+    },
+    {
       name: "meta_list_ad_accounts",
       description:
         "List Meta ad accounts the token can access (Marketing API). Returns id, name, currency, account_status, etc.",
@@ -2199,6 +2266,102 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(data);
       }
+      case "meta_snapshot_object": {
+        const objectId = String(args.object_id).trim();
+        const objectType = String(args.object_type).trim();
+
+        const fieldMap: Record<string, string> = {
+          campaign:
+            "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,updated_time",
+          adset:
+            "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,bid_strategy,optimization_goal,targeting,updated_time",
+          ad:
+            "id,name,status,effective_status,campaign_id,adset_id,creative{id,name},updated_time",
+          creative:
+            "id,name,title,body,object_story_spec,asset_feed_spec,image_hash,thumbnail_url"
+        };
+
+        const snapshot = await graphRequest({
+          path: objectId,
+          accessToken: token,
+          params: {
+            fields: fieldMap[objectType] ?? fieldMap.ad
+          }
+        });
+
+        return jsonResult({
+          snapshot_time: new Date().toISOString(),
+          object_id: objectId,
+          object_type: objectType,
+          snapshot
+        });
+      }
+
+      case "meta_get_account_activity": {
+        const act = normalizeActId(String(args.ad_account_id));
+
+        const data = await graphRequest({
+          path: `${act}/activities`,
+          accessToken: token,
+          params: {
+            since: String(args.since),
+            until: String(args.until),
+            limit: (args.limit as number) ?? 500,
+            category:
+            typeof args.category === "string"
+              ? args.category
+              : undefined,
+            add_children: args.add_children === true ? "true" : undefined,
+            fields:
+              "event_type,event_time,translated_event_type,object_id,object_name,object_type,actor_name,actor_id,extra_data",
+          },
+        });
+
+        return jsonResult({
+          requested_fields:
+            "event_type,event_time,translated_event_type,object_id,object_name,object_type,actor_name,actor_id,extra_data",
+          category: args.category ?? null,
+          add_children: args.add_children === true,
+          raw_response: data,
+        });
+      }
+      case "meta_snapshot_object": {
+        const beforeSnapshot = args.before_snapshot as Record<string, any>;
+        const afterSnapshot = args.after_snapshot as Record<string, any>;
+
+        const changes: Array<{
+          field: string;
+          before: unknown;
+          after: unknown;
+        }> = [];
+
+        const allKeys = new Set([
+          ...Object.keys(beforeSnapshot || {}),
+          ...Object.keys(afterSnapshot || {})
+        ]);
+
+        for (const key of allKeys) {
+          const beforeValue = beforeSnapshot?.[key];
+          const afterValue = afterSnapshot?.[key];
+
+          if (
+            JSON.stringify(beforeValue) !==
+            JSON.stringify(afterValue)
+          ) {
+            changes.push({
+              field: key,
+              before: beforeValue,
+              after: afterValue
+            });
+          }
+        }
+
+        return jsonResult({
+          change_count: changes.length,
+          changes
+        });
+      }
+
       case "meta_graph_get": {
         const path = String(args.path).trim();
         const query = (args.query ?? {}) as Record<string, string>;
