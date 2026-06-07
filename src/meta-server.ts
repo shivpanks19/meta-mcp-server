@@ -5,11 +5,14 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import {
+  graphMultipartRequest,
   graphRequest,
   MetaGraphError,
   optionalPageToken,
   requireEnvToken,
 } from "./meta-api.js";
+import fs from "fs";
+import path from "node:path";
 import {
   normalizeAccountInputs,
   runMetaWeeklyReport,
@@ -108,6 +111,21 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_get_campaign",
+      description: "Get a single campaign including objective, budget and status.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["campaign_id"]
+      }
+    },
+    {
       name: "meta_create_campaign",
       description:
         "Create a campaign on an ad account (Marketing API POST). Default: PAUSED (no delivery), OUTCOME_TRAFFIC, empty special_ad_categories, ad-set-level budgets. Requires ads_management.",
@@ -148,6 +166,293 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_create_adset",
+      description:
+        "Create an ad set on an ad account (Marketing API POST). Default: PAUSED. Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          campaign_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+            description: "Initial status (default PAUSED — safe for testing)",
+          },
+          daily_budget: { type: "number" },
+          billing_event: { type: "string" },
+          optimization_goal: { type: "string" },
+          bid_strategy: { type: "string" },
+          targeting: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["ad_account_id", "campaign_id", "name"],
+      },
+    },
+    {
+      name: "meta_create_creative",
+      description:
+        "Create an ad creative on an ad account (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          name: { type: "string" },
+          object_story_spec: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["ad_account_id", "name", "object_story_spec"],
+      },
+    },
+    {
+      name: "meta_get_creative",
+      description: "Get a creative including headline, body text, CTA, object_story_spec, asset details, and automatically resolve video metadata and source URL when the creative contains a video.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          creative_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["creative_id"]
+      }
+    },
+    {
+      name: "meta_create_creative_variant",
+      description: "Clone an existing creative and optionally replace headline, primary text and description.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          source_creative_id: { type: "string" },
+          name: { type: "string" },
+          headline: { type: "string" },
+          primary_text: { type: "string" },
+          description: { type: "string" }
+        },
+        required: ["ad_account_id", "source_creative_id", "name"]
+      }
+    },
+    {
+      name: "meta_analyze_creative",
+      description: "Analyze a creative and provide optimisation recommendations for copy and messaging.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          creative_id: { type: "string" }
+        },
+        required: ["creative_id"]
+      }
+    },
+    {
+      name: "meta_upload_image",
+      description:
+        "Download an image from a public URL and upload it to a Meta ad account (bytes/base64). Returns image hash for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          image_url: {
+            type: "string",
+            description: "Public image URL accessible by Meta",
+          },
+        },
+        required: ["ad_account_id", "image_url"],
+      },
+    },
+    {
+      name: "meta_upload_image_file",
+      description:
+        "Upload a local image file to a Meta ad account (bytes/base64). Returns image hash for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to image file on local machine",
+          },
+        },
+        required: ["ad_account_id", "file_path"],
+      },
+    },
+    {
+      name: "meta_upload_video_file",
+      description:
+        "Upload a local video file to a Meta ad account via multipart streaming (source field). Returns video id for ad creatives.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          file_path: {
+            type: "string",
+            description: "Absolute path to video file on local machine",
+          },
+        },
+        required: ["ad_account_id", "file_path"],
+      },
+    },
+    {
+      name: "meta_get_video_status",
+      description:
+        "Get processing status and details for a Meta uploaded video by video id.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          video_id: {
+            type: "string",
+            description: "Meta video id returned from meta_upload_video_file",
+          },
+        },
+        required: ["video_id"],
+      },
+    },
+    {
+      name: "meta_create_ad",
+      description:
+        "Create an ad on an ad account (Marketing API POST). Default: PAUSED. Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: {
+            type: "string",
+            description: "Ad account id (e.g. act_590939353820229)",
+          },
+          adset_id: { type: "string" },
+          name: { type: "string" },
+          creative_id: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+            description: "Initial status (default PAUSED — safe for testing)",
+          },
+        },
+        required: ["ad_account_id", "adset_id", "name", "creative_id"],
+      },
+    },
+    {
+      name: "meta_update_campaign",
+      description:
+        "Update a campaign by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          daily_budget: { type: "number" },
+          lifetime_budget: { type: "number" },
+          bid_strategy: { type: "string" },
+          special_ad_categories: {
+            type: "array",
+            items: { type: "string" },
+          },
+          is_adset_budget_sharing_enabled: { type: "boolean" },
+        },
+        required: ["campaign_id"],
+      },
+    },
+    {
+      name: "meta_update_adset",
+      description: "Update an ad set by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          daily_budget: { type: "number" },
+          billing_event: { type: "string" },
+          optimization_goal: { type: "string" },
+          bid_strategy: { type: "string" },
+          targeting: {
+            type: "object",
+            additionalProperties: true,
+          },
+        },
+        required: ["adset_id"],
+      },
+    },
+    {
+      name: "meta_update_ad",
+      description: "Update an ad by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+          name: { type: "string" },
+          status: {
+            type: "string",
+            enum: ["PAUSED", "ACTIVE"],
+          },
+          creative_id: { type: "string" },
+        },
+        required: ["ad_id"],
+      },
+    },
+    {
+      name: "meta_pause_campaign",
+      description:
+        "Pause a campaign by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+        },
+        required: ["campaign_id"],
+      },
+    },
+    {
+      name: "meta_pause_adset",
+      description: "Pause an ad set by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+        },
+        required: ["adset_id"],
+      },
+    },
+    {
+      name: "meta_pause_ad",
+      description: "Pause an ad by ID (Marketing API POST). Requires ads_management.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+        },
+        required: ["ad_id"],
+      },
+    },
+    {
       name: "meta_list_adsets",
       description: "List ad sets for an ad account (optional campaign filter).",
       inputSchema: {
@@ -166,6 +471,39 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_get_adset",
+      description: "Get a single ad set including targeting, budgets and optimization settings.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["adset_id"]
+      }
+    },
+    {
+      name: "meta_bulk_update_locations",
+      description: "Bulk update geo targeting for one or more ad sets.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_ids: {
+            type: "array",
+            items: { type: "string" }
+          },
+          targeting: {
+            type: "object",
+            additionalProperties: true
+          }
+        },
+        required: ["adset_ids", "targeting"]
+      }
+    },
+    {
       name: "meta_list_ads",
       description: "List ads under an ad account.",
       inputSchema: {
@@ -181,6 +519,46 @@ export function createMetaServer(): Server {
         },
         required: ["ad_account_id"],
       },
+    },
+    {
+      name: "meta_get_ad",
+      description: "Get a single ad including creative and adset details.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["ad_id"]
+      }
+    },
+    {
+      name: "meta_get_ad_with_creative",
+      description: "Get an ad together with full creative details, headline, primary text, CTA and object_story_spec.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" }
+        },
+        required: ["ad_id"]
+      }
+    },
+    {
+      name: "meta_generate_copy_variants",
+      description: "Generate copy optimisation suggestions and Marathi headline/body variants from an existing creative.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          creative_id: { type: "string" },
+          language: { type: "string" },
+          objective: { type: "string" },
+          variants: { type: "number" }
+        },
+        required: ["creative_id"]
+      }
     },
     {
       name: "meta_get_insights",
@@ -309,6 +687,62 @@ export function createMetaServer(): Server {
       },
     },
     {
+      name: "meta_get_leadgen_form",
+      description: "Get complete details of a lead generation form including questions, privacy policy, thank you screen and settings.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          form_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["form_id"]
+      }
+    },
+    {
+      name: "meta_get_leadgen_form_performance",
+      description: "Get performance metrics for a lead form including leads and related campaign/ad insights.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          form_id: { type: "string" },
+          fields: {
+            type: "string",
+            description: "Optional comma-separated fields"
+          }
+        },
+        required: ["form_id"]
+      }
+    },
+    {
+      name: "meta_get_leadgen_form_full_analysis",
+      description: "Analyze a lead form, discover ads using it, fetch performance metrics and return optimization insights.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          form_id: { type: "string" },
+          date_preset: {
+            type: "string",
+            description: "Default last_30d"
+          }
+        },
+        required: ["form_id"]
+      }
+    },
+    {
+      name: "meta_analyze_leadgen_form",
+      description: "Analyze a lead form and return optimization recommendations.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          form_id: { type: "string" }
+        },
+        required: ["form_id"]
+      }
+    },
+    {
       name: "meta_get_leads",
       description:
         "Retrieve leads from a leadgen form (pagination supported). Requires leads_retrieval on the token used.",
@@ -325,6 +759,55 @@ export function createMetaServer(): Server {
         },
         required: ["leadgen_form_id"],
       },
+    },
+    {
+      name: "meta_create_optimized_lead_form",
+      description:
+        "Create a Meta Instant Form (Lead Gen Form) with conversion-focused defaults and optionally attach it to lead campaigns.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          page_id: { type: "string" },
+          form_name: { type: "string" },
+          follow_up_url: { type: "string" },
+          privacy_policy_url: { type: "string" },
+          custom_questions: {
+            type: "array",
+            items: { type: "object" },
+          },
+          campaign_id: {
+            type: "string",
+            description: "Optional campaign id for future creative/ad creation workflows",
+          }
+        },
+        required: ["page_id", "form_name", "privacy_policy_url"]
+      }
+    },
+    {
+      name: "meta_pause_low_performers",
+      description: "Pause ads supplied by id list.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_ids: {
+            type: "array",
+            items: { type: "string" }
+          }
+        },
+        required: ["ad_ids"]
+      }
+    },
+    {
+      name: "meta_log_optimisation",
+      description: "Append optimisation notes to markdown log file.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          file_path: { type: "string" },
+          content: { type: "string" }
+        },
+        required: ["file_path", "content"]
+      }
     },
     {
       name: "meta_list_businesses",
@@ -576,6 +1059,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(data);
       }
+
+      case "meta_get_campaign": {
+        const campaignId = String(args.campaign_id).trim();
+
+        const data = await graphRequest({
+          path: campaignId,
+          accessToken: token,
+          params: {
+            fields:
+              (args.fields as string) ??
+              "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy",
+          },
+        });
+
+        return jsonResult(data);
+      }
       case "meta_create_campaign": {
         const act = normalizeActId(String(args.ad_account_id));
         const defaultName = `MCP Test Campaign ${new Date().toISOString().replace(/\.\d{3}Z$/, "Z")}`;
@@ -601,6 +1100,378 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(data);
       }
+      case "meta_create_adset": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const campaignId = String(args.campaign_id).trim();
+        const status = String(args.status ?? "PAUSED").trim().toUpperCase();
+        const data = await graphRequest({
+          path: `${act}/adsets`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            campaign_id: campaignId,
+            status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            daily_budget: args.daily_budget,
+            billing_event: args.billing_event,
+            optimization_goal: args.optimization_goal,
+            bid_strategy: args.bid_strategy,
+            targeting: args.targeting,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_create_creative": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const data = await graphRequest({
+          path: `${act}/adcreatives`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            object_story_spec: args.object_story_spec,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_get_creative": {
+        const creativeId = String(args.creative_id).trim();
+
+        const creative: any = await graphRequest({
+          path: creativeId,
+          accessToken: token,
+          params: {
+            fields:
+              (args.fields as string) ??
+              "id,name,title,body,object_story_spec,asset_feed_spec,image_hash,thumbnail_url,call_to_action_type,effective_object_story_id,object_type",
+          },
+        });
+
+        let video: any = null;
+
+        const videoId =
+          creative?.object_story_spec?.video_data?.video_id ||
+          creative?.asset_feed_spec?.videos?.[0]?.video_id;
+
+        if (videoId) {
+          try {
+            video = await graphRequest({
+              path: String(videoId),
+              accessToken: token,
+              params: {
+                fields:
+                  "id,title,source,permalink_url,thumbnails,length,status,updated_time",
+              },
+            });
+          } catch (error) {
+            video = {
+              id: videoId,
+              fetch_error:
+                error instanceof Error ? error.message : String(error),
+            };
+          }
+        }
+
+        return jsonResult({
+          creative,
+          video,
+          detected_video_id: videoId ?? null,
+        });
+      }
+      case "meta_create_creative_variant": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const sourceCreativeId = String(args.source_creative_id).trim();
+
+        const sourceCreative: any = await graphRequest({
+          path: sourceCreativeId,
+          accessToken: token,
+          params: {
+            fields: "id,name,object_story_spec",
+          },
+        });
+
+        const spec = JSON.parse(JSON.stringify(sourceCreative.object_story_spec ?? {}));
+
+        if (spec.link_data) {
+          if (args.headline) spec.link_data.name = String(args.headline);
+          if (args.primary_text) spec.link_data.message = String(args.primary_text);
+          if (args.description) spec.link_data.description = String(args.description);
+        }
+
+        const created = await graphRequest({
+          path: `${act}/adcreatives`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: String(args.name),
+            object_story_spec: spec,
+          },
+        });
+
+        return jsonResult({
+          success: true,
+          source_creative_id: sourceCreativeId,
+          creative: created,
+        });
+      }
+      case "meta_analyze_creative": {
+        const creativeId = String(args.creative_id).trim();
+
+        const creative: any = await graphRequest({
+          path: creativeId,
+          accessToken: token,
+          params: {
+            fields: "id,name,title,body,object_story_spec",
+          },
+        });
+
+        const recommendations: string[] = [];
+
+        const body = JSON.stringify(creative).toLowerCase();
+
+        if (!body.match(/\d/)) {
+          recommendations.push("Consider using numbers, statistics or quantified outcomes in the copy.");
+        }
+
+        if (body.length < 120) {
+          recommendations.push("Test a stronger value proposition and more context in the primary text.");
+        }
+
+        recommendations.push("Create at least 2 headline variants for A/B testing.");
+        recommendations.push("Test Marathi-first messaging for local audiences where applicable.");
+
+        return jsonResult({
+          creative_id: creativeId,
+          creative,
+          recommendations,
+        });
+      }
+      case "meta_upload_image": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const imageUrl = String(args.image_url).trim();
+
+        const imgRes = await fetch(imageUrl);
+        if (!imgRes.ok) {
+          throw new Error(
+            `Failed to download image: ${imgRes.status} ${imgRes.statusText}`
+          );
+        }
+        const bytes = Buffer.from(await imgRes.arrayBuffer()).toString("base64");
+
+        const data = await graphRequest({
+          path: `${act}/adimages`,
+          method: "POST",
+          accessToken: token,
+          body: { bytes },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_upload_image_file": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const filePath = String(args.file_path).trim();
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const bytes = fs.readFileSync(filePath).toString("base64");
+
+        const data = await graphRequest({
+          path: `${act}/adimages`,
+          method: "POST",
+          accessToken: token,
+          body: { bytes },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_upload_video_file": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const filePath = String(args.file_path).trim();
+
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
+
+        const fileBuffer = fs.readFileSync(filePath);
+        const fileName = path.basename(filePath);
+
+        const data = await graphMultipartRequest<{ id: string }>({
+          path: `${act}/advideos`,
+          accessToken: token,
+          buildForm: (form) => {
+            form.append("source", new Blob([fileBuffer]), fileName);
+          },
+        });
+
+        return jsonResult({
+          success: true,
+          video_id: data.id,
+          raw: data,
+        });
+      }
+      case "meta_get_video_status": {
+        const videoId = String(args.video_id).trim();
+
+        const data = await graphRequest({
+          path: videoId,
+          accessToken: token,
+          params: {
+            fields:
+              "id,title,status,processing_progress,length,source,updated_time",
+          },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_create_ad": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const name = String(args.name).trim();
+        const status = String(args.status ?? "PAUSED").trim().toUpperCase();
+        const data = await graphRequest({
+          path: `${act}/ads`,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name,
+            adset_id: String(args.adset_id).trim(),
+            status: status === "ACTIVE" ? "ACTIVE" : "PAUSED",
+            creative: {
+              creative_id: String(args.creative_id).trim(),
+            },
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_campaign": {
+        const campaignId = String(args.campaign_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const categories = Array.isArray(args.special_ad_categories)
+          ? args.special_ad_categories.map(String)
+          : undefined;
+        const sharing =
+          typeof args.is_adset_budget_sharing_enabled === "boolean"
+            ? args.is_adset_budget_sharing_enabled === true
+              ? 1
+              : 0
+            : undefined;
+        const data = await graphRequest({
+          path: campaignId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            daily_budget: args.daily_budget,
+            lifetime_budget: args.lifetime_budget,
+            bid_strategy: args.bid_strategy,
+            special_ad_categories: categories,
+            is_adset_budget_sharing_enabled: sharing,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_adset": {
+        const adsetId = String(args.adset_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const data = await graphRequest({
+          path: adsetId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            daily_budget: args.daily_budget,
+            billing_event: args.billing_event,
+            optimization_goal: args.optimization_goal,
+            bid_strategy: args.bid_strategy,
+            targeting: args.targeting,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_update_ad": {
+        const adId = String(args.ad_id).trim();
+        const status =
+          typeof args.status === "string"
+            ? args.status.trim().toUpperCase()
+            : undefined;
+        const creativeId =
+          typeof args.creative_id === "string"
+            ? args.creative_id.trim()
+            : undefined;
+        const data = await graphRequest({
+          path: adId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            name: args.name,
+            status:
+              status === undefined
+                ? undefined
+                : status === "ACTIVE"
+                  ? "ACTIVE"
+                  : "PAUSED",
+            creative: creativeId ? { creative_id: creativeId } : undefined,
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_campaign": {
+        const campaignId = String(args.campaign_id).trim();
+        const data = await graphRequest({
+          path: campaignId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_adset": {
+        const adsetId = String(args.adset_id).trim();
+        const data = await graphRequest({
+          path: adsetId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
+          },
+        });
+        return jsonResult(data);
+      }
+      case "meta_pause_ad": {
+        const adId = String(args.ad_id).trim();
+        const data = await graphRequest({
+          path: adId,
+          method: "POST",
+          accessToken: token,
+          body: {
+            status: "PAUSED",
+          },
+        });
+        return jsonResult(data);
+      }
       case "meta_list_adsets": {
         const act = normalizeActId(String(args.ad_account_id));
         const campaignId = args.campaign_id as string | undefined;
@@ -622,6 +1493,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(data);
       }
+
+      case "meta_get_adset": {
+        const adsetId = String(args.adset_id).trim();
+
+        const data = await graphRequest({
+          path: adsetId,
+          accessToken: token,
+          params: {
+            fields:
+              (args.fields as string) ??
+              "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,billing_event,optimization_goal,bid_strategy,targeting",
+          },
+        });
+
+        return jsonResult(data);
+      }
       case "meta_list_ads": {
         const act = normalizeActId(String(args.ad_account_id));
         const data = await graphRequest({
@@ -635,6 +1522,101 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         });
         return jsonResult(data);
+      }
+
+      case "meta_get_ad": {
+        const adId = String(args.ad_id).trim();
+
+        const data = await graphRequest({
+          path: adId,
+          accessToken: token,
+          params: {
+            fields:
+              (args.fields as string) ??
+              "id,name,status,effective_status,adset_id,campaign_id,creative{id,name,title}",
+          },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_get_ad_with_creative": {
+        const adId = String(args.ad_id).trim();
+
+        const ad: any = await graphRequest({
+          path: adId,
+          accessToken: token,
+          params: {
+            fields: "id,name,status,effective_status,adset_id,campaign_id,creative{id,name}"
+          }
+        });
+
+        const creativeId = ad?.creative?.id;
+
+        let creative = null;
+
+        if (creativeId) {
+          creative = await graphRequest({
+            path: creativeId,
+            accessToken: token,
+            params: {
+              fields: "id,name,title,body,object_story_spec,asset_feed_spec,image_hash,thumbnail_url"
+            }
+          });
+        }
+
+        return jsonResult({
+          ad,
+          creative
+        });
+      }
+      case "meta_generate_copy_variants": {
+        const creativeId = String(args.creative_id).trim();
+
+        const creative: any = await graphRequest({
+          path: creativeId,
+          accessToken: token,
+          params: {
+            fields: "id,name,title,body,object_story_spec"
+          }
+        });
+
+        const language = String(args.language ?? "marathi").toLowerCase();
+        const objective = String(args.objective ?? "lead_generation");
+        const variantCount = Number(args.variants ?? 5);
+
+        const recommendations = [
+          "Use stronger benefits in the first line.",
+          "Include numbers or quantified outcomes.",
+          "Test emotional and logical messaging separately.",
+          "Add audience-specific messaging.",
+          "Test shorter and longer headline variants."
+        ];
+
+        const marathiHeadlines = [
+          "तुमच्या कुटुंबाचे आर्थिक संरक्षण आजच सुरू करा",
+          "योग्य टर्म इन्शुरन्स निवडला आहे का?",
+          "₹10 लाख CTC असूनही ही चूक करताय का?",
+          "स्मार्ट गुंतवणूकदार आज काय वेगळं करतात?",
+          "म्युच्युअल फंड आणि इन्शुरन्ससाठी मोफत सल्ला"
+        ].slice(0, variantCount);
+
+        const marathiPrimaryTexts = [
+          "तुमच्या आर्थिक भविष्यासाठी योग्य नियोजन करा.",
+          "म्युच्युअल फंड, टर्म इन्शुरन्स आणि मेडिकल कव्हरसाठी तज्ञ मार्गदर्शन.",
+          "पुणे आणि मुंबईतील व्यावसायिकांसाठी खास आर्थिक सल्ला.",
+          "आजच मोफत कन्सल्टेशन बुक करा.",
+          "दीर्घकालीन संपत्ती निर्माण आणि आर्थिक संरक्षणासाठी संपर्क साधा."
+        ].slice(0, variantCount);
+
+        return jsonResult({
+          creative_id: creativeId,
+          language,
+          objective,
+          source_creative: creative,
+          recommendations,
+          headline_variants: marathiHeadlines,
+          primary_text_variants: marathiPrimaryTexts
+        });
       }
       case "meta_get_insights": {
         const objectId = String(args.object_id).trim();
@@ -735,6 +1717,317 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(data);
       }
+      case "meta_get_leadgen_form": {
+        const formId = String(args.form_id).trim();
+
+        const data = await graphRequest({
+          path: formId,
+          accessToken: token,
+          params: {
+            fields:
+              (args.fields as string) ??
+              "id,name,status,locale,created_time,page_id,follow_up_action_url,privacy_policy_url,questions,context_card,tracking_parameters",
+          },
+        });
+
+        return jsonResult(data);
+      }
+      case "meta_get_leadgen_form_performance": {
+        const formId = String(args.form_id).trim();
+
+        const form = await graphRequest({
+          path: formId,
+          accessToken: token,
+          params: {
+            fields: "id,name,status,leads_count,created_time",
+          },
+        });
+
+        return jsonResult({
+          form,
+          note:
+            "Base form metrics retrieved. Extend later by mapping ads using this form and calculating opens, starts, submissions, CPL and conversion rates from insights.",
+        });
+      }
+      case "meta_get_leadgen_form_full_analysis": {
+        const formId = String(args.form_id).trim();
+        const datePreset = String(args.date_preset ?? "last_30d");
+
+        // 1. Fetch the form
+        const form = await graphRequest({
+          path: formId,
+          accessToken: token,
+          params: {
+            fields:
+              "id,name,status,leads_count,created_time,questions,follow_up_action_url,privacy_policy_url,page_id",
+          },
+        });
+
+        const questionCount = Array.isArray((form as any)?.questions)
+          ? (form as any).questions.length
+          : 0;
+        const leadCount = Number((form as any)?.leads_count ?? 0);
+        const pageId = (form as any)?.page_id;
+
+        // 2. Fetch all forms on this page
+        let pageForms: any[] = [];
+        if (pageId) {
+          try {
+            const pageFormsResp = await graphRequest({
+              path: `${pageId}/leadgen_forms`,
+              accessToken: token,
+              params: {
+                fields: "id,name",
+                limit: 200,
+              },
+            });
+            pageForms = (pageFormsResp as any)?.data ?? [];
+          } catch {
+            pageForms = [];
+          }
+        }
+
+        // 3. Discover ads using the form
+        let matchedAds: any[] = [];
+        let adAccounts: any[] = [];
+        try {
+          const adAccountsResp = await graphRequest({
+            path: "me/adaccounts",
+            accessToken: token,
+            params: { fields: "id,name", limit: 100 },
+          });
+          adAccounts = (adAccountsResp as any)?.data ?? [];
+        } catch {
+          adAccounts = [];
+        }
+
+        // For each ad account, fetch ads and search for creatives referencing this form id
+        for (const account of adAccounts) {
+          const actId = account.id?.startsWith("act_") ? account.id : `act_${account.id}`;
+          let ads: any[] = [];
+          let cursor: string | undefined = undefined;
+          do {
+            try {
+              const adsResp: any = await graphRequest({
+                path: `${actId}/ads`,
+                accessToken: token,
+                params: {
+                  fields:
+                    "id,name,campaign_id,adset_id,creative{id,name,object_story_spec,effective_object_story_id}",
+                  limit: 100,
+                  ...(cursor ? { after: cursor } : {}),
+                },
+              });
+              const data = (adsResp as any)?.data ?? [];
+              ads = data;
+              for (const ad of ads) {
+                // Defensive: skip if no creative
+                if (!ad.creative) continue;
+                // Search for form id in creative object
+                const creativeStr = JSON.stringify(ad.creative);
+                if (creativeStr.includes(formId)) {
+                  matchedAds.push({
+                    ...ad,
+                    ad_account_id: actId,
+                  });
+                }
+              }
+              // Pagination
+              cursor = (adsResp.paging && adsResp.paging.next && adsResp.paging.cursors && adsResp.paging.cursors.after)
+                ? adsResp.paging.cursors.after
+                : undefined;
+            } catch {
+              break;
+            }
+          } while (cursor);
+        }
+
+        // 4. For each matched ad, fetch insights and aggregate totals
+        let totalSpend = 0;
+        let totalClicks = 0;
+        let totalImpressions = 0;
+        let totalLeadsInDateRange = 0;
+        let creatives: any[] = [];
+        for (const ad of matchedAds) {
+          let insights: any[] = [];
+          try {
+            const insightsResp = await graphRequest({
+              path: `${ad.id}/insights`,
+              accessToken: token,
+              params: {
+                date_preset: datePreset,
+                fields:
+                  "impressions,clicks,spend,ctr,cpc,actions,cost_per_action_type",
+                limit: 1,
+              },
+            });
+            insights = (insightsResp as any)?.data ?? [];
+          } catch {
+            insights = [];
+          }
+          if (insights.length > 0) {
+            const insight = insights[0];
+
+            totalSpend += Number(insight.spend ?? 0);
+            totalClicks += Number(insight.clicks ?? 0);
+            totalImpressions += Number(insight.impressions ?? 0);
+
+            let adLeadCount = 0;
+
+            for (const action of insight.actions ?? []) {
+              const actionType = String(action.action_type ?? "").toLowerCase();
+
+              if (actionType === "lead") {
+                adLeadCount = Number(action.value ?? 0);
+              }
+            }
+
+            totalLeadsInDateRange += adLeadCount;
+
+            creatives.push({
+              ad_id: ad.id,
+              ad_name: ad.name,
+              campaign_id: ad.campaign_id,
+              adset_id: ad.adset_id,
+              creative_id: ad.creative?.id,
+              creative_name: ad.creative?.name,
+              leads: adLeadCount,
+              clicks: Number(insight.clicks ?? 0),
+              spend: Number(insight.spend ?? 0),
+              impressions: Number(insight.impressions ?? 0),
+              object_story_spec: ad.creative?.object_story_spec,
+            });
+
+            continue;
+          }
+          creatives.push({
+            ad_id: ad.id,
+            ad_name: ad.name,
+            campaign_id: ad.campaign_id,
+            adset_id: ad.adset_id,
+            creative_id: ad.creative?.id,
+            creative_name: ad.creative?.name,
+            leads: 0,
+            clicks: 0,
+            spend: 0,
+            impressions: 0,
+            object_story_spec: ad.creative?.object_story_spec,
+          });
+        }
+
+        // 5. Derived metrics
+        const leads = totalLeadsInDateRange;
+        const lifetimeLeads = leadCount;
+
+        const cpl = leads > 0 ? totalSpend / leads : null;
+
+        const conversion_rate =
+          totalClicks > 0 ? (leads / totalClicks) * 100 : null;
+
+        // 6. Scorecard
+        const scorecard = {
+          form_id: formId,
+          form_name: (form as any)?.name,
+          status: (form as any)?.status,
+          leads_date_range: leads,
+          lifetime_form_leads: lifetimeLeads,
+          questions_count: questionCount,
+          created_time: (form as any)?.created_time,
+          date_preset: datePreset,
+        };
+
+        // 7. Recommendations
+        const recommendations: string[] = [];
+        if (questionCount > 4) {
+          recommendations.push(
+            "Reduce the number of questions to improve completion rate."
+          );
+        }
+        if (!(form as any)?.follow_up_action_url) {
+          recommendations.push(
+            "Add a follow-up URL, brochure page or booking page after submission."
+          );
+        }
+        if (leads > 1000) {
+          recommendations.push(
+            "This form has significant lead volume. Use it as a benchmark when creating new forms."
+          );
+        }
+        if (matchedAds.length === 0) {
+          recommendations.push(
+            "No ads using this form were found. Ensure your ads reference this form's ID in their creative."
+          );
+        } else {
+          if (cpl !== null && cpl > 500) {
+            recommendations.push(
+              "Cost per lead is high. Consider optimizing your ad creative, targeting, or reducing friction in the form."
+            );
+          }
+          if (conversion_rate !== null && conversion_rate < 5) {
+            recommendations.push(
+              "Click-to-lead conversion rate is low. Test a shorter form or improve your ad messaging."
+            );
+          }
+        }
+
+        // 8. Return new object
+        return jsonResult({
+          form,
+          scorecard,
+          matched_ads_count: matchedAds.length,
+          creatives,
+          performance: {
+            spend: totalSpend,
+            clicks: totalClicks,
+            impressions: totalImpressions,
+            leads_date_range: leads,
+            lifetime_form_leads: lifetimeLeads,
+            cpl,
+            conversion_rate,
+          },
+          recommendations,
+        });
+      }
+      case "meta_analyze_leadgen_form": {
+        const formId = String(args.form_id).trim();
+
+        const form = await graphRequest({
+          path: formId,
+          accessToken: token,
+          params: {
+            fields:
+              "id,name,questions,follow_up_action_url,privacy_policy_url,status",
+          },
+        });
+
+        const questions = Array.isArray((form as any)?.questions)
+          ? (form as any).questions.length
+          : 0;
+
+        const recommendations: string[] = [];
+
+        if (questions > 4) {
+          recommendations.push(
+            "Reduce the number of questions to improve completion rate."
+          );
+        }
+
+        if (!(form as any)?.follow_up_action_url) {
+          recommendations.push(
+            "Add a follow-up URL or thank-you action to improve post-lead engagement."
+          );
+        }
+
+        recommendations.push(
+          "Compare this form against top-performing forms before cloning."
+        );
+
+        return jsonResult({
+          form_id: formId,
+          recommendations,
+          form,
+        });
+      }
       case "meta_get_leads": {
         const formId = String(args.leadgen_form_id).trim();
         const pt =
@@ -750,6 +2043,110 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         });
         return jsonResult(data);
+      }
+      case "meta_create_optimized_lead_form": {
+        const pageId = String(args.page_id).trim();
+        const formName = String(args.form_name).trim();
+
+        const questions = Array.isArray(args.custom_questions)
+          ? args.custom_questions
+          : [
+              { key: "full_name", label: "Full Name" },
+              { key: "email", label: "Email" },
+              { key: "phone_number", label: "Phone Number" },
+            ];
+
+        const body: Record<string, unknown> = {
+          name: formName,
+          locale: "en_US",
+          privacy_policy: {
+            url: String(args.privacy_policy_url),
+            link_text: "Privacy Policy",
+          },
+          follow_up_action_url: args.follow_up_url
+            ? String(args.follow_up_url)
+            : undefined,
+          questions,
+        };
+
+        const data = await graphRequest({
+          path: `${pageId}/leadgen_forms`,
+          method: "POST",
+          accessToken: token,
+          body,
+        });
+
+        return jsonResult({
+          success: true,
+          form: data,
+          note:
+            "Lead form created. Attaching a form to ads requires updating the ad creative object_story_spec with the generated leadgen_form_id.",
+        });
+      }
+
+      case "meta_bulk_update_locations": {
+        const adsetIds = Array.isArray(args.adset_ids)
+          ? args.adset_ids.map(String)
+          : [];
+
+        const targeting = args.targeting;
+        const results = [];
+
+        for (const adsetId of adsetIds) {
+          const response = await graphRequest({
+            path: adsetId,
+            method: "POST",
+            accessToken: token,
+            body: { targeting },
+          });
+
+          results.push({ adset_id: adsetId, response });
+        }
+
+        return jsonResult({
+          success: true,
+          updated_count: results.length,
+          results,
+        });
+      }
+
+      case "meta_pause_low_performers": {
+        const adIds = Array.isArray(args.ad_ids)
+          ? args.ad_ids.map(String)
+          : [];
+
+        const results = [];
+
+        for (const adId of adIds) {
+          const response = await graphRequest({
+            path: adId,
+            method: "POST",
+            accessToken: token,
+            body: {
+              status: "PAUSED",
+            },
+          });
+
+          results.push({ ad_id: adId, response });
+        }
+
+        return jsonResult({
+          success: true,
+          paused_count: results.length,
+          results,
+        });
+      }
+
+      case "meta_log_optimisation": {
+        const filePath = String(args.file_path);
+        const content = String(args.content);
+
+        fs.appendFileSync(filePath, `\n${content}\n`, "utf8");
+
+        return jsonResult({
+          success: true,
+          file_path: filePath,
+        });
       }
       case "meta_list_businesses": {
         const data = await graphRequest({
