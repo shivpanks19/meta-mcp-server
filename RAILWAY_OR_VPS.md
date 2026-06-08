@@ -22,7 +22,8 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
 | `PORT` | Auto on Railway | HTTP port (default **8080** locally) |
 | `HOST` | No | Bind address (default **0.0.0.0**) |
 | `MCP_HTTP_PATH` | No | MCP route (default **`/mcp`**) |
-| `MCP_AUTH_TOKEN` | Recommended in production | If set, clients must send `Authorization: Bearer <token>` on MCP requests |
+| `MCP_SHARED_TOKEN` | Recommended in production | If set, clients must send `Authorization: Bearer <token>` on MCP requests (401 missing, 403 invalid) |
+| `MCP_AUTH_TOKEN` | Legacy | Alias for `MCP_SHARED_TOKEN` when the latter is unset |
 | `MCP_ALLOWED_HOSTS` | Recommended public hosts | Comma-separated allowed `Host` values (e.g. `your-app.up.railway.app`) |
 
 ---
@@ -41,7 +42,7 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
 4. **Variables** (in Railway **Variables**):
 
    - `META_ACCESS_TOKEN` = your Meta token  
-   - `MCP_AUTH_TOKEN` = a long random secret (protects `/mcp`)  
+   - `MCP_SHARED_TOKEN` = a long random secret (protects `/mcp`)  
    - `MCP_ALLOWED_HOSTS` = your Railway hostname, e.g. `your-service.up.railway.app`  
 
    Railway injects **`PORT`** automatically—do not override unless you know why.
@@ -55,7 +56,20 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
 
    Default path: **`https://<host>/mcp`**.
 
-7. **Cursor (remote MCP):** Configure your MCP client with that HTTPS URL. If you use `MCP_AUTH_TOKEN`, add the Bearer token in the client’s headers if supported.
+7. **Cursor (remote MCP):** Configure your MCP client with that HTTPS URL and Bearer token:
+
+   ```json
+   {
+     "mcpServers": {
+       "meta": {
+         "url": "https://<your-railway-host>/mcp",
+         "headers": {
+           "Authorization": "Bearer <MCP_SHARED_TOKEN>"
+         }
+       }
+     }
+   }
+   ```
 
 ---
 
@@ -81,7 +95,7 @@ Create `/etc/meta-mcp.env` (permissions `600`, owned by root or deploy user):
 
 ```bash
 META_ACCESS_TOKEN=your_meta_token
-MCP_AUTH_TOKEN=your_long_random_secret
+MCP_SHARED_TOKEN=your_long_random_secret
 HOST=0.0.0.0
 PORT=8080
 MCP_ALLOWED_HOSTS=your.domain.com
@@ -148,7 +162,7 @@ location / {
 ## Security checklist
 
 - Use **HTTPS** on the public internet.
-- Set **`MCP_AUTH_TOKEN`** and require `Authorization: Bearer` on `/mcp`.
+- Set **`MCP_SHARED_TOKEN`** and require `Authorization: Bearer` on `/mcp`.
 - Restrict **`MCP_ALLOWED_HOSTS`** to your real hostname(s).
 - Rotate Meta tokens on expiry; store secrets only in the platform secret manager.
 
