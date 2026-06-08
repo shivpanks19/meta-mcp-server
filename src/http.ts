@@ -3,7 +3,7 @@
  * POST /mcp — MCP JSON-RPC over streamable HTTP.
  * GET /health — health check (no auth).
  *
- * Env: PORT (Railway), META_ACCESS_TOKEN, optional MCP_AUTH_TOKEN, MCP_ALLOWED_HOSTS.
+ * Env: PORT (Railway), META_ACCESS_TOKEN, optional MCP_SHARED_TOKEN, MCP_ALLOWED_HOSTS.
  * Local: put secrets in `.env` at project root (see `.env.example`).
  */
 import "dotenv/config";
@@ -11,6 +11,10 @@ import type { Request, Response, NextFunction } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js";
 import { createMetaServer } from "./meta-server.js";
+import {
+  mcpSharedTokenMiddleware,
+  resolveMcpSharedToken,
+} from "./mcp-auth.js";
 import {
   normalizeAccountInputs,
   runMetaWeeklyReport,
@@ -33,24 +37,6 @@ function cronAuthMiddleware(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({
       error: "Unauthorized",
       hint: "Set Authorization: Bearer <CRON_SECRET>",
-    });
-    return;
-  }
-  next();
-}
-
-function authMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.MCP_AUTH_TOKEN?.trim();
-  if (!secret) {
-    next();
-    return;
-  }
-  const auth = req.headers.authorization;
-  const expected = `Bearer ${secret}`;
-  if (auth !== expected) {
-    res.status(401).json({
-      error: "Unauthorized",
-      hint: "Set Authorization: Bearer <MCP_AUTH_TOKEN>",
     });
     return;
   }
@@ -130,12 +116,12 @@ app.get("/health", (_req: Request, res: Response) => {
     service: "meta-mcp-server",
     mcpPath,
     weeklyJobPath: "/v1/meta-weekly/run",
-    authRequired: Boolean(process.env.MCP_AUTH_TOKEN?.trim()),
+    authRequired: Boolean(resolveMcpSharedToken()),
     cronAuthRequired: Boolean(process.env.CRON_SECRET?.trim()),
   });
 });
 
-installMcpRoute(app, mcpPath, authMiddleware);
+installMcpRoute(app, mcpPath, mcpSharedTokenMiddleware);
 
 app.post(
   "/v1/meta-weekly/run",
