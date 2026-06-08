@@ -7,25 +7,60 @@ MCP server for Meta Marketing API — ad accounts, campaigns, creatives, insight
 | Mode | Command | Use case |
 |------|---------|----------|
 | **HTTP (remote)** | `npm start` | Render, Railway, VPS — Cursor connects via URL |
-| **Stdio (local)** | `npm run start:stdio` | Local Cursor MCP via `node dist/index.js` |
+| **Stdio (local)** | `npm run start:stdio` | Local Cursor MCP via `node dist/index.js` (no Bearer auth) |
 
-## Remote authentication
+Bearer auth (`MCP_SHARED_TOKEN`) applies only to the **HTTP server** (`npm start`), not stdio.
 
-When `MCP_SHARED_TOKEN` is set, **every MCP HTTP request** to `/mcp` must include:
+### Local HTTP + MCP Inspector (with Bearer)
 
+Terminal 1 — start HTTP server (loads `.env` including `MCP_SHARED_TOKEN`):
+
+```bash
+npm run build && npm start
+```
+
+Terminal 2 — Inspector against HTTP with token:
+
+```bash
+npm run inspector:http
+```
+
+Or manually:
+
+```bash
+npx @modelcontextprotocol/inspector \
+  --transport http \
+  --server-url http://127.0.0.1:8080/mcp \
+  --header "Authorization: Bearer hexanovate_meta_2026"
+```
+
+**Do not** use `npx @modelcontextprotocol/inspector node dist/index.js` to test Bearer auth — that is stdio and bypasses HTTP middleware.
+
+## Remote authentication (dual mode)
+
+When `MCP_SHARED_TOKEN` is set, **every MCP HTTP request** to `/mcp` must authenticate using **either**:
+
+**Option A — Bearer header (recommended for Cursor):**
 ```
 Authorization: Bearer <token>
 ```
 
+**Option B — Query parameter (clients that cannot set headers):**
+```
+https://mcp.yourdomain.com/mcp?key=<token>
+```
+
 | Condition | HTTP status |
 |-----------|-------------|
-| Header missing | `401 Unauthorized` |
-| Token does not match | `403 Forbidden` |
-| Token matches | Request proceeds (all tools protected automatically) |
+| No Bearer and no `?key=` | `401 Unauthorized` |
+| Wrong Bearer or wrong `?key=` | `403 Forbidden` |
+| Valid Bearer **or** valid `?key=` | Request proceeds (all tools protected automatically) |
 
 Token comparison uses **timing-safe** equality. No per-tool changes are required.
 
 `GET /health` remains public (no auth).
+
+> **Note:** Query-string secrets can appear in logs and browser history. Prefer Bearer for Cursor and production. ChatGPT connectors may flag API keys in URLs as unsafe.
 
 ### `.env` example
 
@@ -35,7 +70,7 @@ MCP_SHARED_TOKEN=hexanovate_meta_2026
 MCP_ALLOWED_HOSTS=your-app.onrender.com
 ```
 
-### Cursor MCP client config
+### Cursor MCP client config (Bearer)
 
 ```json
 {
@@ -50,20 +85,28 @@ MCP_ALLOWED_HOSTS=your-app.onrender.com
 }
 ```
 
+### Query-key URL example
+
+```
+https://meta-mcp-server.onrender.com/mcp?key=hexanovate_meta_2026
+```
+
 ### Verify deployment
 
 ```bash
 # Health (no auth)
 curl -s https://mcp.yourdomain.com/health
 
-# MCP without token → 401
+# MCP without credentials → 401
 curl -s -o /dev/null -w "%{http_code}" -X POST https://mcp.yourdomain.com/mcp
 
-# MCP with wrong token → 403
-curl -s -o /dev/null -w "%{http_code}" -X POST https://mcp.yourdomain.com/mcp \
-  -H "Authorization: Bearer wrong"
+# MCP with wrong ?key= → 403
+curl -s -o /dev/null -w "%{http_code}" -X POST "https://mcp.yourdomain.com/mcp?key=wrong"
 
-# MCP with correct token → 200 or MCP protocol response
+# MCP with correct ?key= (passes auth; may return 406 without MCP Accept headers)
+curl -s -o /dev/null -w "%{http_code}" -X POST "https://mcp.yourdomain.com/mcp?key=hexanovate_meta_2026"
+
+# MCP with Bearer → preferred for full MCP clients
 curl -s -X POST https://mcp.yourdomain.com/mcp \
   -H "Authorization: Bearer hexanovate_meta_2026" \
   -H "Content-Type: application/json" \

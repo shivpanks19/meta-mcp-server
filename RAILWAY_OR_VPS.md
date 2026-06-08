@@ -22,7 +22,7 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
 | `PORT` | Auto on Railway | HTTP port (default **8080** locally) |
 | `HOST` | No | Bind address (default **0.0.0.0**) |
 | `MCP_HTTP_PATH` | No | MCP route (default **`/mcp`**) |
-| `MCP_SHARED_TOKEN` | Recommended in production | If set, clients must send `Authorization: Bearer <token>` on MCP requests (401 missing, 403 invalid) |
+| `MCP_SHARED_TOKEN` | Recommended in production | If set, clients must send `Authorization: Bearer <token>` **or** `?key=<token>` on MCP requests (401 missing, 403 invalid) |
 | `MCP_AUTH_TOKEN` | Legacy | Alias for `MCP_SHARED_TOKEN` when the latter is unset |
 | `MCP_ALLOWED_HOSTS` | Recommended public hosts | Comma-separated allowed `Host` values (e.g. `your-app.up.railway.app`) |
 
@@ -56,7 +56,7 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
 
    Default path: **`https://<host>/mcp`**.
 
-7. **Cursor (remote MCP):** Configure your MCP client with that HTTPS URL and Bearer token:
+7. **Cursor (remote MCP):** Bearer header (recommended):
 
    ```json
    {
@@ -70,6 +70,10 @@ This project exposes the Meta Marketing API as an MCP server over **Streamable H
      }
    }
    ```
+
+   Or query-key URL for clients that cannot set headers:
+
+   `https://<your-railway-host>/mcp?key=<MCP_SHARED_TOKEN>`
 
 ---
 

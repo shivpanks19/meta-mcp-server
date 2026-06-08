@@ -26,10 +26,27 @@ function parseBearerToken(header: string | undefined): string | undefined {
   return match?.[1]?.trim() || undefined;
 }
 
+function parseQueryKey(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const first = value.find((v) => typeof v === "string" && v.trim());
+    return typeof first === "string" ? first.trim() : undefined;
+  }
+  return undefined;
+}
+
+function tokenMatches(provided: string, expected: string): boolean {
+  return timingSafeEqualString(provided, expected);
+}
+
 /**
  * Protects MCP HTTP routes when MCP_SHARED_TOKEN (or legacy MCP_AUTH_TOKEN) is set.
- * - Missing Authorization → 401
- * - Invalid token → 403
+ * Accepts either:
+ * - Authorization: Bearer <token>
+ * - Query param: ?key=<token>
+ *
+ * - No credentials → 401
+ * - Invalid credentials → 403
  */
 export function mcpSharedTokenMiddleware(
   req: Request,
@@ -42,31 +59,30 @@ export function mcpSharedTokenMiddleware(
     return;
   }
 
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.trim()) {
+  const queryKey = parseQueryKey(req.query.key);
+  const bearer = parseBearerToken(req.headers.authorization);
+
+  if (!queryKey && !bearer) {
     res.status(401).json({
       error: "Unauthorized",
-      hint: "Set Authorization: Bearer <MCP_SHARED_TOKEN>",
+      hint:
+        "Provide MCP_SHARED_TOKEN via Authorization: Bearer <token> or ?key=<token>",
     });
     return;
   }
 
-  const provided = parseBearerToken(authHeader);
-  if (!provided) {
-    res.status(401).json({
-      error: "Unauthorized",
-      hint: "Authorization header must be: Bearer <token>",
-    });
+  if (queryKey && tokenMatches(queryKey, expected)) {
+    next();
     return;
   }
 
-  if (!timingSafeEqualString(provided, expected)) {
-    res.status(403).json({
-      error: "Forbidden",
-      hint: "Invalid MCP shared token",
-    });
+  if (bearer && tokenMatches(bearer, expected)) {
+    next();
     return;
   }
 
-  next();
+  res.status(403).json({
+    error: "Forbidden",
+    hint: "Invalid MCP shared token (Bearer or ?key=)",
+  });
 }
