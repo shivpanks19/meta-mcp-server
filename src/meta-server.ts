@@ -17,6 +17,14 @@ import {
   normalizeAccountInputs,
   runMetaWeeklyReport,
 } from "./weekly-report.js";
+import {
+  buildBudgetRecommendations,
+  buildDeliveryDiagnostics,
+  buildFatigueRecommendations,
+  enrichPerformanceRows,
+  summarizeBreakdowns,
+  summarizePerformance,
+} from "./ppc-manager.js";
 import { loadWeeklyConfig } from "./weekly/config.js";
 import { resolveSpreadsheetId } from "./weekly/google-auth.js";
 import {
@@ -628,6 +636,239 @@ export function createMetaServer(): Server {
       }
     },
     {
+      name: "plan_weekly_meta_performance_actions",
+      description:
+        "Read-only weekly PPC action plan from campaign, ad set, ad, fatigue and tracking diagnostics.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string", description: "Default last_7d" },
+          time_range: {
+            type: "object",
+            properties: {
+              since: { type: "string" },
+              until: { type: "string" },
+            },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_meta_campaign_performance",
+      description:
+        "Campaign-level performance report with derived metrics and read-only recommendations.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_meta_adset_performance",
+      description:
+        "Ad set-level performance, pacing and budget reallocation diagnostics.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_meta_ad_performance",
+      description:
+        "Ad-level performance report with creative metadata and fatigue-ready metrics.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_creative_fatigue_insights",
+      description:
+        "Analyze ad/creative fatigue using frequency, CPM, CTR, CPA, spend and conversions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_audience_fatigue_insights",
+      description:
+        "Analyze audience/ad set fatigue using frequency, CPM, CTR, CPA, spend and conversions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_meta_breakdown_insights",
+      description:
+        "Placement, demographic, geo or device breakdown insights with weak-segment recommendations.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          level: {
+            type: "string",
+            enum: ["account", "campaign", "adset", "ad"],
+            description: "Default adset",
+          },
+          breakdowns: {
+            type: "string",
+            description:
+              "Comma-separated breakdowns, e.g. publisher_platform,platform_position,age,gender,country,impression_device",
+          },
+          date_preset: { type: "string" },
+          time_range: {
+            type: "object",
+            properties: { since: { type: "string" }, until: { type: "string" } },
+          },
+          limit: { type: "number" },
+        },
+        required: ["ad_account_id", "breakdowns"],
+      },
+    },
+    {
+      name: "get_meta_conversion_tracking_status",
+      description:
+        "Read-only conversion/event tracking health check from pixels, custom conversions and recent insight actions.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          expected_events: {
+            type: "array",
+            items: { type: "string" },
+            description: "Default: lead, purchase, complete_registration, contact",
+          },
+          date_preset: { type: "string" },
+        },
+        required: ["ad_account_id"],
+      },
+    },
+    {
+      name: "get_meta_change_history",
+      description:
+        "Structured recent edits report for a Meta ad account using the activities endpoint.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_account_id: { type: "string" },
+          since: { type: "string", description: "YYYY-MM-DD" },
+          until: { type: "string", description: "YYYY-MM-DD" },
+          limit: { type: "number" },
+          category: { type: "string" },
+        },
+        required: ["ad_account_id", "since", "until"],
+      },
+    },
+    {
+      name: "update_meta_campaign_status",
+      description:
+        "Safely update only a campaign status. Honors validate_only and META_ADS_MUTATE_VALIDATE_ONLY.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          campaign_id: { type: "string" },
+          status: { type: "string", enum: ["ACTIVE", "PAUSED"] },
+          validate_only: { type: "boolean", description: "Default true" },
+          reason: { type: "string" },
+        },
+        required: ["campaign_id", "status"],
+      },
+    },
+    {
+      name: "update_meta_adset_status",
+      description:
+        "Safely update only an ad set status. Honors validate_only and META_ADS_MUTATE_VALIDATE_ONLY.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+          status: { type: "string", enum: ["ACTIVE", "PAUSED"] },
+          validate_only: { type: "boolean", description: "Default true" },
+          reason: { type: "string" },
+        },
+        required: ["adset_id", "status"],
+      },
+    },
+    {
+      name: "update_meta_ad_status",
+      description:
+        "Safely update only an ad status. Honors validate_only and META_ADS_MUTATE_VALIDATE_ONLY.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          ad_id: { type: "string" },
+          status: { type: "string", enum: ["ACTIVE", "PAUSED"] },
+          validate_only: { type: "boolean", description: "Default true" },
+          reason: { type: "string" },
+        },
+        required: ["ad_id", "status"],
+      },
+    },
+    {
+      name: "update_meta_adset_budget",
+      description:
+        "Safely update an ad set daily budget with dry-run defaults and before snapshot.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          adset_id: { type: "string" },
+          daily_budget: { type: "number" },
+          validate_only: { type: "boolean", description: "Default true" },
+          reason: { type: "string" },
+        },
+        required: ["adset_id", "daily_budget"],
+      },
+    },
+    {
       name: "meta_get_insights",
       description:
         "Fetch insights for an ad account, campaign, ad set, or ad. Use level account|campaign|adset|ad.",
@@ -1066,6 +1307,118 @@ function normalizeActId(id: string): string {
   if (t.startsWith("act_")) return t;
   if (/^\d+$/.test(t)) return `act_${t}`;
   return t;
+}
+
+function isValidateOnly(args: Record<string, unknown>): boolean {
+  return args.validate_only !== false || process.env.META_ADS_MUTATE_VALIDATE_ONLY === "1";
+}
+
+function normalizeStatus(value: unknown): "ACTIVE" | "PAUSED" {
+  const status = String(value).trim().toUpperCase();
+  if (status !== "ACTIVE" && status !== "PAUSED") {
+    throw new Error("status must be ACTIVE or PAUSED");
+  }
+  return status;
+}
+
+function insightParams(
+  args: Record<string, unknown>,
+  level: "account" | "campaign" | "adset" | "ad",
+  fields: string
+): Record<string, string | number | boolean | undefined> {
+  const params: Record<string, string | number | boolean | undefined> = {
+    level,
+    fields,
+    limit: (args.limit as number) ?? 100,
+  };
+  const tr = args.time_range as { since?: string; until?: string } | undefined;
+  if (tr?.since && tr?.until) {
+    params.time_range = JSON.stringify({ since: tr.since, until: tr.until });
+  } else {
+    params.date_preset = String(args.date_preset ?? "last_7d");
+  }
+  if (args.breakdowns) params.breakdowns = String(args.breakdowns);
+  return params;
+}
+
+async function fetchPerformanceRows(
+  token: string,
+  adAccountId: string,
+  args: Record<string, unknown>,
+  level: "campaign" | "adset" | "ad"
+) {
+  const fieldsByLevel = {
+    campaign:
+      "campaign_id,campaign_name,impressions,reach,frequency,clicks,spend,ctr,cpc,cpm,actions,cost_per_action_type",
+    adset:
+      "campaign_id,campaign_name,adset_id,adset_name,impressions,reach,frequency,clicks,spend,ctr,cpc,cpm,actions,cost_per_action_type",
+    ad:
+      "campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,impressions,reach,frequency,clicks,spend,ctr,cpc,cpm,actions,cost_per_action_type",
+  };
+  const response: any = await graphRequest({
+    path: `${normalizeActId(adAccountId)}/insights`,
+    accessToken: token,
+    params: insightParams(args, level, fieldsByLevel[level]),
+  });
+  return enrichPerformanceRows(response?.data ?? []);
+}
+
+async function fetchObjectSnapshot(
+  token: string,
+  objectId: string,
+  fields: string
+) {
+  return graphRequest({
+    path: objectId,
+    accessToken: token,
+    params: { fields },
+  });
+}
+
+async function safePostMutation(
+  token: string,
+  args: Record<string, unknown>,
+  objectId: string,
+  body: Record<string, unknown>,
+  snapshotFields: string,
+  toolName: string
+) {
+  const before = await fetchObjectSnapshot(token, objectId, snapshotFields);
+  const proposed_mutation = { path: objectId, method: "POST", body };
+  if (isValidateOnly(args)) {
+    return {
+      ok: true,
+      validate_only: true,
+      summary: "Validation-only response. No Meta Ads mutation was sent.",
+      diagnostics: { before },
+      recommendations: [],
+      action_items: [
+        {
+          tool_to_apply: toolName,
+          tool_arguments: { ...args, validate_only: false },
+        },
+      ],
+      tool_to_apply: toolName,
+      proposed_mutation,
+    };
+  }
+
+  const response = await graphRequest({
+    path: objectId,
+    method: "POST",
+    accessToken: token,
+    body,
+  });
+  return {
+    ok: true,
+    validate_only: false,
+    summary: "Meta Ads mutation applied.",
+    diagnostics: { before, response },
+    recommendations: [],
+    action_items: [],
+    tool_to_apply: toolName,
+    proposed_mutation,
+  };
 }
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -1684,6 +2037,322 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           headline_variants: marathiHeadlines,
           primary_text_variants: marathiPrimaryTexts
         });
+      }
+      case "get_meta_campaign_performance": {
+        const rows = await fetchPerformanceRows(
+          token,
+          String(args.ad_account_id),
+          args,
+          "campaign"
+        );
+        const recommendations = rows
+          .filter((row) => row.spend_num >= 500 && row.conversions === 0)
+          .map((row) => ({
+            priority: "medium" as const,
+            entity_id: String(row.campaign_id ?? ""),
+            entity_name: String(row.campaign_name ?? row.campaign_id ?? ""),
+            issue: "Campaign has spend but no tracked conversions in this date range.",
+            recommendation:
+              "Inspect ad set and ad performance before pausing. Check tracking if all child entities show zero conversions.",
+            tool_to_apply: "get_meta_adset_performance",
+          }));
+        return jsonResult({
+          ok: true,
+          summary: summarizePerformance(rows),
+          diagnostics: rows,
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_meta_adset_performance": {
+        const rows = await fetchPerformanceRows(
+          token,
+          String(args.ad_account_id),
+          args,
+          "adset"
+        );
+        const recommendations = [
+          ...buildDeliveryDiagnostics(rows),
+          ...buildBudgetRecommendations(rows),
+        ];
+        return jsonResult({
+          ok: true,
+          summary: summarizePerformance(rows),
+          diagnostics: rows,
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_meta_ad_performance": {
+        const rows = await fetchPerformanceRows(
+          token,
+          String(args.ad_account_id),
+          args,
+          "ad"
+        );
+        const recommendations = buildFatigueRecommendations(rows, "creative");
+        return jsonResult({
+          ok: true,
+          summary: summarizePerformance(rows),
+          diagnostics: rows,
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_creative_fatigue_insights": {
+        const rows = await fetchPerformanceRows(
+          token,
+          String(args.ad_account_id),
+          args,
+          "ad"
+        );
+        const recommendations = buildFatigueRecommendations(rows, "creative");
+        return jsonResult({
+          ok: true,
+          summary: {
+            ...summarizePerformance(rows),
+            fatigue_count: recommendations.length,
+          },
+          diagnostics: rows,
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_audience_fatigue_insights": {
+        const rows = await fetchPerformanceRows(
+          token,
+          String(args.ad_account_id),
+          args,
+          "adset"
+        );
+        const recommendations = buildFatigueRecommendations(rows, "audience");
+        return jsonResult({
+          ok: true,
+          summary: {
+            ...summarizePerformance(rows),
+            fatigue_count: recommendations.length,
+          },
+          diagnostics: rows,
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_meta_breakdown_insights": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const level = String(args.level ?? "adset") as
+          | "account"
+          | "campaign"
+          | "adset"
+          | "ad";
+        const breakdowns = String(args.breakdowns);
+        const fields =
+          "impressions,reach,frequency,clicks,spend,ctr,cpc,cpm,actions,cost_per_action_type";
+        const response: any = await graphRequest({
+          path: `${act}/insights`,
+          accessToken: token,
+          params: insightParams({ ...args, breakdowns }, level, fields),
+        });
+        const rows = enrichPerformanceRows(response?.data ?? []);
+        const breakdownKeys = breakdowns.split(",").map((b) => b.trim()).filter(Boolean);
+        const breakdownSummary = summarizeBreakdowns(rows, breakdownKeys);
+        return jsonResult({
+          ok: true,
+          summary: summarizePerformance(rows),
+          diagnostics: breakdownSummary.diagnostics,
+          recommendations: breakdownSummary.recommendations,
+          action_items: breakdownSummary.recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_meta_conversion_tracking_status": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const expectedEvents = Array.isArray(args.expected_events)
+          ? args.expected_events.map((event) => String(event).toLowerCase())
+          : ["lead", "purchase", "complete_registration", "contact"];
+        const results: Record<string, unknown> = {};
+        const warnings: string[] = [];
+
+        for (const [key, path] of Object.entries({
+          pixels: `${act}/adspixels`,
+          custom_conversions: `${act}/customconversions`,
+        })) {
+          try {
+            results[key] = await graphRequest({
+              path,
+              accessToken: token,
+              params: { fields: "id,name,creation_time,last_fired_time,is_unavailable", limit: 100 },
+            });
+          } catch (error) {
+            warnings.push(`${key} could not be fetched: ${error instanceof Error ? error.message : String(error)}`);
+            results[key] = null;
+          }
+        }
+
+        const response: any = await graphRequest({
+          path: `${act}/insights`,
+          accessToken: token,
+          params: insightParams(
+            { date_preset: args.date_preset ?? "last_7d", limit: 100 },
+            "account",
+            "actions,spend,impressions,clicks"
+          ),
+        });
+        const actionTypes = new Set<string>();
+        for (const row of response?.data ?? []) {
+          for (const action of row.actions ?? []) {
+            actionTypes.add(String(action.action_type ?? "").toLowerCase());
+          }
+        }
+        const missingEvents = expectedEvents.filter(
+          (event) => !Array.from(actionTypes).some((seen) => seen.includes(event))
+        );
+        const recommendations = missingEvents.length
+          ? [
+              {
+                priority: "high" as const,
+                issue: `Expected conversion events not seen recently: ${missingEvents.join(", ")}.`,
+                recommendation:
+                  "Verify pixel/dataset setup, event matching, Aggregated Event Measurement, and campaign optimization events.",
+                tool_to_apply: "meta_graph_get",
+              },
+            ]
+          : [];
+        return jsonResult({
+          ok: true,
+          summary: {
+            configured: true,
+            recently_firing_events: Array.from(actionTypes),
+            missing_events: missingEvents,
+            warning_count: warnings.length,
+          },
+          diagnostics: { ...results, warnings },
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "get_meta_change_history": {
+        const act = normalizeActId(String(args.ad_account_id));
+        const data: any = await graphRequest({
+          path: `${act}/activities`,
+          accessToken: token,
+          params: {
+            since: String(args.since),
+            until: String(args.until),
+            limit: (args.limit as number) ?? 100,
+            category: typeof args.category === "string" ? args.category : undefined,
+            fields:
+              "event_type,event_time,translated_event_type,object_id,object_name,object_type,actor_name,actor_id,extra_data",
+          },
+        });
+        const events = data?.data ?? [];
+        return jsonResult({
+          ok: true,
+          summary: {
+            event_count: events.length,
+            since: args.since,
+            until: args.until,
+          },
+          diagnostics: events,
+          recommendations: [],
+          action_items: [],
+          tool_to_apply: null,
+        });
+      }
+      case "plan_weekly_meta_performance_actions": {
+        const adAccountId = String(args.ad_account_id);
+        const [campaignRows, adsetRows, adRows] = await Promise.all([
+          fetchPerformanceRows(token, adAccountId, args, "campaign"),
+          fetchPerformanceRows(token, adAccountId, args, "adset"),
+          fetchPerformanceRows(token, adAccountId, args, "ad"),
+        ]);
+        const recommendations = [
+          ...buildDeliveryDiagnostics(adsetRows),
+          ...buildBudgetRecommendations(adsetRows),
+          ...buildFatigueRecommendations(adsetRows, "audience"),
+          ...buildFatigueRecommendations(adRows, "creative"),
+        ].sort((a, b) => {
+          const rank = { high: 0, medium: 1, low: 2 };
+          return rank[a.priority] - rank[b.priority];
+        });
+        return jsonResult({
+          ok: true,
+          summary: {
+            campaigns: summarizePerformance(campaignRows),
+            adsets: summarizePerformance(adsetRows),
+            ads: summarizePerformance(adRows),
+            recommendation_count: recommendations.length,
+          },
+          diagnostics: {
+            campaign_rows: campaignRows,
+            adset_rows: adsetRows,
+            ad_rows: adRows,
+          },
+          recommendations,
+          action_items: recommendations,
+          tool_to_apply: null,
+        });
+      }
+      case "update_meta_campaign_status": {
+        const campaignId = String(args.campaign_id).trim();
+        return jsonResult(
+          await safePostMutation(
+            token,
+            args,
+            campaignId,
+            { status: normalizeStatus(args.status) },
+            "id,name,status,effective_status,updated_time",
+            "update_meta_campaign_status"
+          )
+        );
+      }
+      case "update_meta_adset_status": {
+        const adsetId = String(args.adset_id).trim();
+        return jsonResult(
+          await safePostMutation(
+            token,
+            args,
+            adsetId,
+            { status: normalizeStatus(args.status) },
+            "id,name,status,effective_status,campaign_id,daily_budget,updated_time",
+            "update_meta_adset_status"
+          )
+        );
+      }
+      case "update_meta_ad_status": {
+        const adId = String(args.ad_id).trim();
+        return jsonResult(
+          await safePostMutation(
+            token,
+            args,
+            adId,
+            { status: normalizeStatus(args.status) },
+            "id,name,status,effective_status,campaign_id,adset_id,updated_time",
+            "update_meta_ad_status"
+          )
+        );
+      }
+      case "update_meta_adset_budget": {
+        const adsetId = String(args.adset_id).trim();
+        const dailyBudget = Number(args.daily_budget);
+        if (!Number.isFinite(dailyBudget) || dailyBudget <= 0) {
+          throw new Error("daily_budget must be a positive number in account minor units");
+        }
+        return jsonResult(
+          await safePostMutation(
+            token,
+            args,
+            adsetId,
+            { daily_budget: Math.round(dailyBudget) },
+            "id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget,updated_time",
+            "update_meta_adset_budget"
+          )
+        );
       }
       case "meta_get_insights": {
         const objectId = String(args.object_id).trim();
@@ -2325,7 +2994,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           raw_response: data,
         });
       }
-      case "meta_snapshot_object": {
+      case "meta_compare_snapshots": {
         const beforeSnapshot = args.before_snapshot as Record<string, any>;
         const afterSnapshot = args.after_snapshot as Record<string, any>;
 

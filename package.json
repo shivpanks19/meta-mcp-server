@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "start": "node dist/http.js",
     "start:stdio": "node dist/index.js",
     "dev": "node --import tsx src/index.ts",

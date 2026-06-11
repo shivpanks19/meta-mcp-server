@@ -125,6 +125,13 @@ npm start
 
 - [RAILWAY_OR_VPS.md](./RAILWAY_OR_VPS.md) — deployment guide
 - [docs/META_WEEKLY_REPORTING.md](./docs/META_WEEKLY_REPORTING.md) — weekly reports + Sheets
+- [docs/PPC_MANAGER_TOOLS.md](./docs/PPC_MANAGER_TOOLS.md) — AI-assisted PPC planning, diagnostics, and safe mutation tools
+
+## Meta Ads mutation safety
+
+Set `META_ADS_DISABLE_MUTATIONS=1` to block all Meta Graph API writes from this
+server. Set `META_ADS_MUTATE_VALIDATE_ONLY=1` to force the safe PPC manager
+mutation tools to return proposed payloads without applying changes.
 
 ## Legacy env
 
