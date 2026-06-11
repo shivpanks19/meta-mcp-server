@@ -52,6 +52,15 @@ export async function graphRequest<T = unknown>(
 
   const method = opts.method ?? "GET";
 
+  if (
+    (method === "POST" || method === "DELETE") &&
+    process.env.META_ADS_DISABLE_MUTATIONS === "1"
+  ) {
+    throw new Error(
+      "Meta Ads mutations are disabled by META_ADS_DISABLE_MUTATIONS=1"
+    );
+  }
+
   if (method === "GET") {
     url.searchParams.set("access_token", token);
     if (opts.params) {
