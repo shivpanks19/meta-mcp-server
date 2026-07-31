@@ -118,12 +118,19 @@ curl -s -X POST https://mcp.yourdomain.com/mcp \
 ```bash
 npm ci
 npm run build
-npm start
+npm test
+npm start          # HTTP live MCP (Railway / Render)
+npm run start:stdio # Local Cursor stdio
 ```
+
+### Social publishing (Facebook + Instagram)
+
+See [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) for `meta_publish_social_post`, Page/IG permissions, and live deploy notes.
 
 ## Docs
 
 - [RAILWAY_OR_VPS.md](./RAILWAY_OR_VPS.md) — deployment guide
+- [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) — Facebook & Instagram publishing
 - [docs/META_WEEKLY_REPORTING.md](./docs/META_WEEKLY_REPORTING.md) — weekly reports + Sheets
 - [docs/PPC_MANAGER_TOOLS.md](./docs/PPC_MANAGER_TOOLS.md) — AI-assisted PPC planning, diagnostics, and safe mutation tools
 

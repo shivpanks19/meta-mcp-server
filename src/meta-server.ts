@@ -25,7 +25,9 @@ import {
   summarizeBreakdowns,
   summarizePerformance,
 } from "./ppc-manager.js";
-import { loadWeeklyConfig } from "./weekly/config.js";
+import {
+  loadWeeklyConfig,
+} from "./weekly/config.js";
 import { resolveSpreadsheetId } from "./weekly/google-auth.js";
 import {
   clearSheetTab,
@@ -33,6 +35,11 @@ import {
   readSheetRange,
   testGoogleSheetsAccess,
 } from "./weekly/sheets.js";
+import {
+  createFacebookPagePost,
+  handleSocialPublishTool,
+  socialPublishToolDefinitions,
+} from "./social-publish.js";
 
 function jsonResult(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
@@ -962,13 +969,21 @@ export function createMetaServer(): Server {
     {
       name: "meta_create_page_post",
       description:
-        "Publish a message post to a Page (requires pages_manage_posts and page token).",
+        "Publish a text or link post to a Page feed (legacy). For image posts or Instagram, prefer meta_publish_facebook_post, meta_publish_instagram_post, or meta_publish_social_post. Requires pages_manage_posts and page token.",
       inputSchema: {
         type: "object",
         properties: {
           page_id: { type: "string" },
           message: { type: "string", description: "Post text" },
           link: { type: "string", description: "Optional link URL" },
+          image_url: {
+            type: "string",
+            description: "Optional public image URL (uses /photos instead of /feed)",
+          },
+          published: {
+            type: "boolean",
+            description: "Default true",
+          },
           page_access_token: {
             type: "string",
             description: "Page access token (often required)",
@@ -977,6 +992,7 @@ export function createMetaServer(): Server {
         required: ["page_id", "message"],
       },
     },
+    ...socialPublishToolDefinitions,
     {
       name: "meta_list_leadgen_forms",
       description: "List lead generation forms for a Page.",
@@ -2425,15 +2441,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const pageId = String(args.page_id).trim();
         const pt =
           optionalPageToken(args.page_access_token as string | undefined) ?? token;
-        const body: Record<string, unknown> = {
+        const data = await createFacebookPagePost({
+          page_id: pageId,
+          page_access_token: pt,
           message: String(args.message),
-        };
-        if (args.link) body.link = String(args.link);
-        const data = await graphRequest({
-          path: `${pageId}/feed`,
-          accessToken: pt,
-          method: "POST",
-          body,
+          link: args.link ? String(args.link) : undefined,
+          image_url: args.image_url ? String(args.image_url) : undefined,
+          published: args.published !== false,
         });
         return jsonResult(data);
       }
@@ -3120,6 +3134,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           skipSheets: args.skip_sheets === true,
         });
         return jsonResult(result);
+      }
+      const socialResult = await handleSocialPublishTool(
+        name,
+        args as Record<string, unknown>,
+        token
+      );
+      if (socialResult !== null) {
+        return jsonResult(socialResult);
       }
       default:
         return {
