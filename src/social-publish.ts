@@ -12,6 +12,220 @@ export interface PagePublishingContext {
   };
 }
 
+export interface PublishCarouselPostInput {
+  page_id: string;
+  message: string;
+  image_urls: string[];
+  platforms?: SocialPlatform[];
+  published?: boolean;
+  page_access_token?: string;
+  instagram_user_id?: string;
+}
+
+const MIN_CAROUSEL_ITEMS = 2;
+const MAX_CAROUSEL_ITEMS = 10;
+
+export function normalizeImageUrls(imageUrls: unknown): string[] {
+  if (!Array.isArray(imageUrls)) {
+    throw new Error("image_urls must be an array of public HTTPS URLs.");
+  }
+  const urls = imageUrls
+    .map((u) => String(u).trim())
+    .filter((u) => u.length > 0);
+  if (urls.length < MIN_CAROUSEL_ITEMS) {
+    throw new Error(
+      `Carousel requires at least ${MIN_CAROUSEL_ITEMS} image URLs (got ${urls.length}).`
+    );
+  }
+  if (urls.length > MAX_CAROUSEL_ITEMS) {
+    throw new Error(
+      `Carousel supports up to ${MAX_CAROUSEL_ITEMS} images (got ${urls.length}).`
+    );
+  }
+  return urls;
+}
+
+export async function createFacebookCarouselPost(input: {
+  page_id: string;
+  page_access_token: string;
+  message: string;
+  image_urls: string[];
+  published?: boolean;
+}): Promise<{
+  photo_ids: string[];
+  feed: unknown;
+}> {
+  const published = input.published ?? true;
+  const imageUrls = normalizeImageUrls(input.image_urls);
+  const photoIds: string[] = [];
+
+  for (const url of imageUrls) {
+    const photo = await graphRequest<{ id: string }>({
+      path: `${input.page_id}/photos`,
+      accessToken: input.page_access_token,
+      method: "POST",
+      body: {
+        url,
+        published: false,
+      },
+    });
+    photoIds.push(photo.id);
+  }
+
+  const body: Record<string, unknown> = {
+    message: input.message,
+    published,
+  };
+  photoIds.forEach((id, index) => {
+    body[`attached_media[${index}]`] = JSON.stringify({ media_fbid: id });
+  });
+
+  const feed = await graphRequest({
+    path: `${input.page_id}/feed`,
+    accessToken: input.page_access_token,
+    method: "POST",
+    body,
+  });
+
+  return { photo_ids: photoIds, feed };
+}
+
+export async function publishInstagramCarouselPost(input: {
+  instagram_user_id: string;
+  page_access_token: string;
+  caption: string;
+  image_urls: string[];
+}): Promise<{
+  child_container_ids: string[];
+  carousel_container_id: string;
+  publish: unknown;
+}> {
+  const imageUrls = normalizeImageUrls(input.image_urls);
+  const childIds: string[] = [];
+
+  for (const url of imageUrls) {
+    const child = await graphRequest<{ id: string }>({
+      path: `${input.instagram_user_id}/media`,
+      accessToken: input.page_access_token,
+      method: "POST",
+      body: {
+        image_url: url,
+        is_carousel_item: true,
+      },
+    });
+    childIds.push(child.id);
+    await waitForInstagramContainerReady(child.id, input.page_access_token);
+  }
+
+  const carouselContainer = await graphRequest<{ id: string }>({
+    path: `${input.instagram_user_id}/media`,
+    accessToken: input.page_access_token,
+    method: "POST",
+    body: {
+      media_type: "CAROUSEL",
+      children: childIds.join(","),
+      caption: input.caption,
+    },
+  });
+
+  await waitForInstagramContainerReady(
+    carouselContainer.id,
+    input.page_access_token
+  );
+
+  const publish = await publishInstagramMediaContainer({
+    instagram_user_id: input.instagram_user_id,
+    page_access_token: input.page_access_token,
+    creation_id: carouselContainer.id,
+  });
+
+  return {
+    child_container_ids: childIds,
+    carousel_container_id: carouselContainer.id,
+    publish,
+  };
+}
+
+export async function publishCarouselPost(
+  input: PublishCarouselPostInput,
+  userToken: string
+): Promise<{
+  page_id: string;
+  platforms_requested: SocialPlatform[];
+  image_count: number;
+  facebook?: { photo_ids: string[]; feed: unknown };
+  instagram?: {
+    child_container_ids: string[];
+    carousel_container_id: string;
+    publish: unknown;
+  };
+  warnings?: string[];
+}> {
+  const pageId = String(input.page_id).trim();
+  const message = String(input.message).trim();
+  if (!message) {
+    throw new Error(
+      "message is required (Facebook post text and Instagram caption)."
+    );
+  }
+
+  const imageUrls = normalizeImageUrls(input.image_urls);
+  const platforms = normalizePlatforms(input.platforms);
+  const ctx = await resolvePagePublishingContext(
+    pageId,
+    userToken,
+    input.page_access_token
+  );
+
+  const result: {
+    page_id: string;
+    platforms_requested: SocialPlatform[];
+    image_count: number;
+    facebook?: { photo_ids: string[]; feed: unknown };
+    instagram?: {
+      child_container_ids: string[];
+      carousel_container_id: string;
+      publish: unknown;
+    };
+    warnings?: string[];
+  } = {
+    page_id: pageId,
+    platforms_requested: platforms,
+    image_count: imageUrls.length,
+  };
+
+  if (platforms.includes("facebook")) {
+    result.facebook = await createFacebookCarouselPost({
+      page_id: pageId,
+      page_access_token: ctx.page_access_token,
+      message,
+      image_urls: imageUrls,
+      published: input.published,
+    });
+  }
+
+  if (platforms.includes("instagram")) {
+    const igUserId =
+      input.instagram_user_id?.trim() ??
+      ctx.instagram_business_account?.id;
+
+    if (!igUserId) {
+      throw new Error(
+        `Page ${pageId} has no linked Instagram business account. Link IG in Meta Business Suite or pass instagram_user_id.`
+      );
+    }
+
+    result.instagram = await publishInstagramCarouselPost({
+      instagram_user_id: igUserId,
+      page_access_token: ctx.page_access_token,
+      caption: message,
+      image_urls: imageUrls,
+    });
+  }
+
+  return result;
+}
+
 export interface PublishSocialPostInput {
   page_id: string;
   message: string;
@@ -444,6 +658,40 @@ export const socialPublishToolDefinitions = [
       required: ["page_id", "message"],
     },
   },
+  {
+    name: "meta_publish_carousel_post",
+    description:
+      "Publish a multi-image carousel to Facebook Page (multi-photo feed post) and/or linked Instagram business account (CAROUSEL container). Requires 2–10 public HTTPS image_urls. Default platforms: facebook + instagram when IG is linked.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page_id: { type: "string", description: "Facebook Page ID" },
+        message: {
+          type: "string",
+          description: "Facebook post text / Instagram caption",
+        },
+        image_urls: {
+          type: "array",
+          items: { type: "string" },
+          description: "2–10 public HTTPS image URLs (order = slide order)",
+          minItems: 2,
+          maxItems: 10,
+        },
+        platforms: {
+          type: "array",
+          items: { type: "string", enum: ["facebook", "instagram"] },
+          description: "Default: [facebook, instagram]",
+        },
+        published: {
+          type: "boolean",
+          description: "Facebook only — default true",
+        },
+        page_access_token: { type: "string" },
+        instagram_user_id: { type: "string" },
+      },
+      required: ["page_id", "message", "image_urls"],
+    },
+  },
 ] as const;
 
 export async function handleSocialPublishTool(
@@ -530,6 +778,20 @@ export async function handleSocialPublishTool(
             | undefined,
           wait_for_video_processing:
             args.wait_for_video_processing !== false,
+        },
+        userToken
+      );
+    }
+    case "meta_publish_carousel_post": {
+      return publishCarouselPost(
+        {
+          page_id: String(args.page_id),
+          message: String(args.message),
+          image_urls: args.image_urls as string[],
+          platforms: args.platforms as SocialPlatform[] | undefined,
+          published: args.published !== false,
+          page_access_token: args.page_access_token as string | undefined,
+          instagram_user_id: args.instagram_user_id as string | undefined,
         },
         userToken
       );

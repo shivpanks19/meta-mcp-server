@@ -27,6 +27,7 @@ Use a **Page access token** when possible (`page_access_token` argument or `META
 | `meta_publish_facebook_post` | Text, link, or image URL to Page feed/photos |
 | `meta_publish_instagram_post` | Image or video URL + caption to IG business account |
 | `meta_publish_social_post` | **One call** — Facebook + Instagram (default both) |
+| `meta_publish_carousel_post` | **Carousel** — 2–10 images to Facebook multi-photo + IG CAROUSEL |
 | `meta_create_page_post` | Legacy feed post (now supports `image_url` too) |
 
 ## Examples
@@ -79,6 +80,34 @@ Tool: `meta_publish_social_post`
 ```
 
 Tool: `meta_publish_instagram_post`
+
+### Carousel (2–10 images)
+
+```json
+{
+  "page_id": "123456789012345",
+  "message": "Slide 1: problem → Slide 2: proof → Slide 3: CTA",
+  "image_urls": [
+    "https://example.com/slide-1.jpg",
+    "https://example.com/slide-2.jpg",
+    "https://example.com/slide-3.jpg"
+  ],
+  "platforms": ["facebook", "instagram"]
+}
+```
+
+Tool: `meta_publish_carousel_post`
+
+- **Facebook:** uploads each image unpublished, then one feed post with `attached_media` (multi-photo carousel).
+- **Instagram:** creates carousel item containers, then `media_type=CAROUSEL` with `children`, then publishes.
+
+Facebook-only carousel:
+
+```json
+{
+  "platforms": ["facebook"]
+}
+```
 
 ## Notes
 
