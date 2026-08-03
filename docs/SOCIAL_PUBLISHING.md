@@ -21,6 +21,8 @@ Use a **Page access token** when possible (`page_access_token` argument or `META
 
 ## Tools
 
+### Publishing
+
 | Tool | Purpose |
 |------|---------|
 | `meta_get_page_publishing_context` | Resolve page token + linked `instagram_business_account` |
@@ -28,7 +30,23 @@ Use a **Page access token** when possible (`page_access_token` argument or `META
 | `meta_publish_instagram_post` | Image or video URL + caption to IG business account |
 | `meta_publish_social_post` | **One call** — Facebook + Instagram (default both) |
 | `meta_publish_carousel_post` | **Carousel** — 2–10 images to Facebook multi-photo + IG CAROUSEL |
+| `meta_schedule_facebook_post` | Schedule a Facebook post 10 min–75 days ahead |
 | `meta_create_page_post` | Legacy feed post (now supports `image_url` too) |
+
+### SMM (insights, comments, moderation)
+
+See [docs/SOCIAL_SMM.md](./SOCIAL_SMM.md) for full examples.
+
+| Tool | Purpose |
+|------|---------|
+| `meta_list_instagram_media` | List IG posts/reels with caption, permalink, counts |
+| `meta_get_facebook_post_insights` | Post-level Facebook engagement metrics |
+| `meta_get_instagram_media_insights` | IG media impressions, reach, engagement |
+| `meta_get_page_smm_insights` | Page + linked IG organic metrics (day/week/28d) |
+| `meta_list_post_comments` | Comments on a FB post or IG media |
+| `meta_create_post_comment` | Reply or comment on FB/IG |
+| `meta_hide_post_comment` | Hide a comment (moderation) |
+| `meta_delete_page_post` | Delete a Facebook Page post |
 
 ## Examples
 

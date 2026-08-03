@@ -295,19 +295,24 @@ export async function createFacebookPagePost(input: {
   link?: string;
   image_url?: string;
   published?: boolean;
+  scheduled_publish_time?: number;
 }): Promise<unknown> {
   const published = input.published ?? true;
 
   if (input.image_url) {
+    const body: Record<string, unknown> = {
+      url: input.image_url,
+      message: input.message,
+      published,
+    };
+    if (input.scheduled_publish_time !== undefined) {
+      body.scheduled_publish_time = input.scheduled_publish_time;
+    }
     return graphRequest({
       path: `${input.page_id}/photos`,
       accessToken: input.page_access_token,
       method: "POST",
-      body: {
-        url: input.image_url,
-        message: input.message,
-        published,
-      },
+      body,
     });
   }
 
@@ -316,6 +321,9 @@ export async function createFacebookPagePost(input: {
     published,
   };
   if (input.link) body.link = input.link;
+  if (input.scheduled_publish_time !== undefined) {
+    body.scheduled_publish_time = input.scheduled_publish_time;
+  }
 
   return graphRequest({
     path: `${input.page_id}/feed`,

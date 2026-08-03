@@ -40,6 +40,10 @@ import {
   handleSocialPublishTool,
   socialPublishToolDefinitions,
 } from "./social-publish.js";
+import {
+  handleSocialSmmTool,
+  socialSmmToolDefinitions,
+} from "./social-smm.js";
 
 function jsonResult(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
@@ -993,6 +997,7 @@ export function createMetaServer(): Server {
       },
     },
     ...socialPublishToolDefinitions,
+    ...socialSmmToolDefinitions,
     {
       name: "meta_list_leadgen_forms",
       description: "List lead generation forms for a Page.",
@@ -3135,19 +3140,28 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         });
         return jsonResult(result);
       }
-      const socialResult = await handleSocialPublishTool(
-        name,
-        args as Record<string, unknown>,
-        token
-      );
-      if (socialResult !== null) {
-        return jsonResult(socialResult);
-      }
-      default:
+      default: {
+        const socialResult = await handleSocialPublishTool(
+          name,
+          args as Record<string, unknown>,
+          token
+        );
+        if (socialResult !== null) {
+          return jsonResult(socialResult);
+        }
+        const smmResult = await handleSocialSmmTool(
+          name,
+          args as Record<string, unknown>,
+          token
+        );
+        if (smmResult !== null) {
+          return jsonResult(smmResult);
+        }
         return {
           content: [{ type: "text", text: `Unknown tool: ${name}` }],
           isError: true,
         };
+      }
     }
   } catch (e) {
     return {

@@ -123,14 +123,16 @@ npm start          # HTTP live MCP (Railway / Render)
 npm run start:stdio # Local Cursor stdio
 ```
 
-### Social publishing (Facebook + Instagram)
+### Social publishing & SMM (Facebook + Instagram)
 
-See [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) for `meta_publish_social_post`, Page/IG permissions, and live deploy notes.
+- [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) — publish posts, carousels, cross-post to FB + IG
+- [docs/SOCIAL_SMM.md](./docs/SOCIAL_SMM.md) — insights, comments, scheduling, moderation
 
 ## Docs
 
 - [RAILWAY_OR_VPS.md](./RAILWAY_OR_VPS.md) — deployment guide
 - [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) — Facebook & Instagram publishing
+- [docs/SOCIAL_SMM.md](./docs/SOCIAL_SMM.md) — SMM insights, comments, scheduling
 - [docs/META_WEEKLY_REPORTING.md](./docs/META_WEEKLY_REPORTING.md) — weekly reports + Sheets
 - [docs/PPC_MANAGER_TOOLS.md](./docs/PPC_MANAGER_TOOLS.md) — AI-assisted PPC planning, diagnostics, and safe mutation tools
 
