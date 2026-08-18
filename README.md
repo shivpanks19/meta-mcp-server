@@ -127,12 +127,19 @@ npm run start:stdio # Local Cursor stdio
 
 - [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) — publish posts, carousels, cross-post to FB + IG
 - [docs/SOCIAL_SMM.md](./docs/SOCIAL_SMM.md) — insights, comments, scheduling, moderation
+- [docs/INSTAGRAM_REELS.md](./docs/INSTAGRAM_REELS.md) — Reel organic analytics (read-only)
+
+### WhatsApp Business
+
+- [docs/WHATSAPP.md](./docs/WHATSAPP.md) — send messages and templates via Cloud API
 
 ## Docs
 
 - [RAILWAY_OR_VPS.md](./RAILWAY_OR_VPS.md) — deployment guide
 - [docs/SOCIAL_PUBLISHING.md](./docs/SOCIAL_PUBLISHING.md) — Facebook & Instagram publishing
 - [docs/SOCIAL_SMM.md](./docs/SOCIAL_SMM.md) — SMM insights, comments, scheduling
+- [docs/WHATSAPP.md](./docs/WHATSAPP.md) — WhatsApp Cloud API messaging
+- [docs/INSTAGRAM_REELS.md](./docs/INSTAGRAM_REELS.md) — Instagram Reel organic analytics
 - [docs/META_WEEKLY_REPORTING.md](./docs/META_WEEKLY_REPORTING.md) — weekly reports + Sheets
 - [docs/PPC_MANAGER_TOOLS.md](./docs/PPC_MANAGER_TOOLS.md) — AI-assisted PPC planning, diagnostics, and safe mutation tools
 

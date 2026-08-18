@@ -5,9 +5,7 @@ import {
 } from "./social-publish.js";
 
 const SOCIAL_SMM_TOOL_NAMES = new Set([
-  "meta_list_instagram_media",
   "meta_get_facebook_post_insights",
-  "meta_get_instagram_media_insights",
   "meta_get_page_smm_insights",
   "meta_list_post_comments",
   "meta_create_post_comment",
@@ -59,32 +57,6 @@ async function resolvePageToken(
 
 export const socialSmmToolDefinitions = [
   {
-    name: "meta_list_instagram_media",
-    description:
-      "List recent Instagram business account media (posts, reels, carousels) with optional fields like caption, permalink, media_type, timestamp.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        page_id: {
-          type: "string",
-          description: "Facebook Page linked to the IG account",
-        },
-        instagram_user_id: {
-          type: "string",
-          description: "Optional IG business account id",
-        },
-        fields: {
-          type: "string",
-          description:
-            "Default: id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count",
-        },
-        limit: { type: "number", description: "Default 25" },
-        page_access_token: { type: "string" },
-      },
-      required: ["page_id"],
-    },
-  },
-  {
     name: "meta_get_facebook_post_insights",
     description:
       "Fetch engagement insights for a Facebook Page post (impressions, clicks, reactions, etc.).",
@@ -100,28 +72,6 @@ export const socialSmmToolDefinitions = [
         page_access_token: { type: "string" },
       },
       required: ["post_id"],
-    },
-  },
-  {
-    name: "meta_get_instagram_media_insights",
-    description:
-      "Fetch Instagram media insights (impressions, reach, engagement, saved, etc.) for a business account post.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        media_id: { type: "string", description: "Instagram media id" },
-        metrics: {
-          type: "string",
-          description:
-            "Comma-separated metrics (default: impressions,reach,engagement,saved)",
-        },
-        page_id: {
-          type: "string",
-          description: "Page linked to IG (for token resolution)",
-        },
-        page_access_token: { type: "string" },
-      },
-      required: ["media_id", "page_id"],
     },
   },
   {
@@ -276,33 +226,6 @@ export async function handleSocialSmmTool(
   if (!isSocialSmmTool(name)) return null;
 
   switch (name) {
-    case "meta_list_instagram_media": {
-      const pageId = String(args.page_id).trim();
-      const ctx = await resolvePagePublishingContext(
-        pageId,
-        userToken,
-        args.page_access_token as string | undefined
-      );
-      const igUserId =
-        (args.instagram_user_id
-          ? String(args.instagram_user_id).trim()
-          : undefined) ?? ctx.instagram_business_account?.id;
-      if (!igUserId) {
-        throw new Error(
-          `Page ${pageId} has no linked Instagram business account.`
-        );
-      }
-      return graphRequest({
-        path: `${igUserId}/media`,
-        accessToken: ctx.page_access_token,
-        params: {
-          fields:
-            (args.fields as string) ??
-            "id,caption,media_type,media_url,permalink,timestamp,like_count,comments_count",
-          limit: (args.limit as number) ?? 25,
-        },
-      });
-    }
     case "meta_get_facebook_post_insights": {
       const postId = String(args.post_id).trim();
       const pt =
@@ -315,24 +238,6 @@ export async function handleSocialSmmTool(
           metric:
             (args.metrics as string) ??
             "post_impressions_unique,post_engaged_users,post_clicks,post_reactions_by_type_total",
-        },
-      });
-    }
-    case "meta_get_instagram_media_insights": {
-      const mediaId = String(args.media_id).trim();
-      const pageId = String(args.page_id).trim();
-      const pt = await resolvePageToken(
-        pageId,
-        userToken,
-        args.page_access_token as string | undefined
-      );
-      return graphRequest({
-        path: `${mediaId}/insights`,
-        accessToken: pt,
-        params: {
-          metric:
-            (args.metrics as string) ??
-            "impressions,reach,engagement,saved",
         },
       });
     }

@@ -21,9 +21,7 @@ Use a **Page access token** when possible.
 
 | Tool | Purpose |
 |------|---------|
-| `meta_list_instagram_media` | Recent IG media for a linked business account |
 | `meta_get_facebook_post_insights` | Impressions, clicks, reactions on a FB post |
-| `meta_get_instagram_media_insights` | Impressions, reach, engagement on IG media |
 | `meta_get_page_smm_insights` | Page + optional IG account organic metrics |
 | `meta_list_post_comments` | List comments (FB post or IG media) |
 | `meta_create_post_comment` | Add a comment or public reply |
@@ -33,18 +31,9 @@ Use a **Page access token** when possible.
 
 Publishing tools (`meta_publish_*`) are documented in [SOCIAL_PUBLISHING.md](./SOCIAL_PUBLISHING.md).
 
+Instagram Reel analytics tools are documented in [INSTAGRAM_REELS.md](./INSTAGRAM_REELS.md).
+
 ## Examples
-
-### List Instagram media
-
-```json
-{
-  "page_id": "123456789012345",
-  "limit": 10
-}
-```
-
-Tool: `meta_list_instagram_media`
 
 ### Page SMM dashboard metrics
 

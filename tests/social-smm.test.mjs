@@ -7,8 +7,8 @@ import {
 } from "../dist/social-smm.js";
 
 test("isSocialSmmTool recognizes SMM tool names", () => {
-  assert.equal(isSocialSmmTool("meta_list_instagram_media"), true);
-  assert.equal(isSocialSmmTool("meta_publish_social_post"), false);
+  assert.equal(isSocialSmmTool("meta_get_page_smm_insights"), true);
+  assert.equal(isSocialSmmTool("meta_list_instagram_media"), false);
 });
 
 test("meta_schedule_facebook_post rejects past timestamps", async () => {

@@ -1,7 +1,7 @@
 {
   "name": "meta-mcp-server",
   "version": "1.0.0",
-  "description": "MCP server for Meta Ads Manager, Business Manager, Pages/social, and Lead Ads",
+  "description": "MCP server for Meta Ads Manager, Business Manager, Pages/social, WhatsApp, and Lead Ads",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

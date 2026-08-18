@@ -44,6 +44,14 @@ import {
   handleSocialSmmTool,
   socialSmmToolDefinitions,
 } from "./social-smm.js";
+import {
+  handleInstagramReelsTool,
+  instagramReelsToolDefinitions,
+} from "./instagram-reels.js";
+import {
+  handleWhatsAppTool,
+  whatsAppToolDefinitions,
+} from "./whatsapp.js";
 
 function jsonResult(data: unknown): { content: Array<{ type: "text"; text: string }> } {
   return {
@@ -998,6 +1006,8 @@ export function createMetaServer(): Server {
     },
     ...socialPublishToolDefinitions,
     ...socialSmmToolDefinitions,
+    ...whatsAppToolDefinitions,
+    ...instagramReelsToolDefinitions,
     {
       name: "meta_list_leadgen_forms",
       description: "List lead generation forms for a Page.",
@@ -3149,6 +3159,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (socialResult !== null) {
           return jsonResult(socialResult);
         }
+        const instagramReelsResult = await handleInstagramReelsTool(
+          name,
+          args as Record<string, unknown>,
+          token
+        );
+        if (instagramReelsResult !== null) {
+          return jsonResult(instagramReelsResult);
+        }
         const smmResult = await handleSocialSmmTool(
           name,
           args as Record<string, unknown>,
@@ -3156,6 +3174,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         if (smmResult !== null) {
           return jsonResult(smmResult);
+        }
+        const whatsAppResult = await handleWhatsAppTool(
+          name,
+          args as Record<string, unknown>,
+          token
+        );
+        if (whatsAppResult !== null) {
+          return jsonResult(whatsAppResult);
         }
         return {
           content: [{ type: "text", text: `Unknown tool: ${name}` }],

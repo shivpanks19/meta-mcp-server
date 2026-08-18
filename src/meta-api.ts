@@ -110,6 +110,57 @@ export async function graphRequest<T = unknown>(
   return json;
 }
 
+export interface GraphJsonRequestOptions {
+  path: string;
+  accessToken: string;
+  body: Record<string, unknown>;
+  method?: "POST" | "DELETE";
+  apiVersion?: string;
+}
+
+/** JSON POST/DELETE for Meta APIs that reject form-urlencoded bodies (e.g. WhatsApp Cloud). */
+export async function graphJsonRequest<T = unknown>(
+  opts: GraphJsonRequestOptions
+): Promise<T> {
+  const version = graphApiVersion(opts.apiVersion);
+  const base = `https://graph.facebook.com/${version}/${stripLeadingSlash(opts.path)}`;
+  const method = opts.method ?? "POST";
+
+  if (process.env.META_ADS_DISABLE_MUTATIONS === "1") {
+    throw new Error(
+      "Meta Ads mutations are disabled by META_ADS_DISABLE_MUTATIONS=1"
+    );
+  }
+
+  const token = opts.accessToken;
+  if (!token) {
+    throw new Error("Missing access token");
+  }
+
+  const res = await fetch(base, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(opts.body),
+  });
+
+  const json = (await res.json()) as T & {
+    error?: { message?: string; code?: number; error_subcode?: number };
+  };
+
+  if (!res.ok || json.error) {
+    throw new MetaGraphError(
+      json.error?.message ?? res.statusText,
+      res.status,
+      json
+    );
+  }
+
+  return json;
+}
+
 export async function graphMultipartRequest<T = unknown>(
   opts: GraphMultipartRequestOptions
 ): Promise<T> {
